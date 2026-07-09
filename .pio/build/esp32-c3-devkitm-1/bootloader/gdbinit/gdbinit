@@ -1,0 +1,2 @@
+source /home/Qiless/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/gdbinit/symbols
+source /home/Qiless/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/gdbinit/connect
