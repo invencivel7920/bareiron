@@ -3,6 +3,9 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
@@ -65,7 +68,11 @@
  * Why have I not done this yet? Well, I'm close to uploading the video,
  * and I don't want to risk refactoring anything this close to release.
  */
+ lua_State *L;
+ void setup_lua() {
+
 void handlePacket (int client_fd, int length, int packet_id, int state) {
+  L = luaL_newstate();
 
   // Count the amount of bytes received to catch length discrepancies
   uint64_t bytes_received_start = total_bytes_received;
