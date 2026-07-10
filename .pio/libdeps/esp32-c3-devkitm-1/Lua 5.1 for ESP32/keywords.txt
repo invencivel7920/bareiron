@@ -1,0 +1,75 @@
+# Lua 5.1 C API - syntax highlighting for Arduino IDE
+# KEYWORD1 = orange (functions)
+# KEYWORD2 = brown (types/constants)
+# KEYWORD3 = blue (preprocessor - not used here)
+
+# Core types and state
+lua_State	KEYWORD2
+lua_Integer	KEYWORD2
+lua_Number	KEYWORD2
+LUA_OK	KEYWORD2
+LUA_ERRRUN	KEYWORD2
+LUA_ERRMEM	KEYWORD2
+LUA_ERRERR	KEYWORD2
+
+# State and stack
+lua_newstate	KEYWORD1
+lua_close	KEYWORD1
+luaL_newstate	KEYWORD1
+luaL_openlibs	KEYWORD1
+lua_gettop	KEYWORD1
+lua_settop	KEYWORD1
+lua_pushvalue	KEYWORD1
+lua_remove	KEYWORD1
+lua_insert	KEYWORD1
+lua_replace	KEYWORD1
+lua_pop	KEYWORD1
+
+# Stack push
+lua_pushnil	KEYWORD1
+lua_pushnumber	KEYWORD1
+lua_pushinteger	KEYWORD1
+lua_pushlstring	KEYWORD1
+lua_pushstring	KEYWORD1
+lua_pushboolean	KEYWORD1
+lua_pushcclosure	KEYWORD1
+lua_pushcfunction	KEYWORD1
+
+# Stack read
+lua_toboolean	KEYWORD1
+lua_tointeger	KEYWORD1
+lua_tonumber	KEYWORD1
+lua_tostring	KEYWORD1
+lua_type	KEYWORD1
+lua_isnil	KEYWORD1
+lua_isnumber	KEYWORD1
+lua_isstring	KEYWORD1
+lua_isfunction	KEYWORD1
+lua_istable	KEYWORD1
+
+# Call and load
+lua_pcall	KEYWORD1
+lua_call	KEYWORD1
+luaL_loadstring	KEYWORD1
+luaL_loadfile	KEYWORD1
+luaL_dostring	KEYWORD1
+luaL_dofile	KEYWORD1
+
+# Table and global
+lua_gettable	KEYWORD1
+lua_settable	KEYWORD1
+lua_getfield	KEYWORD1
+lua_setfield	KEYWORD1
+lua_getglobal	KEYWORD1
+lua_setglobal	KEYWORD1
+
+# Register C function
+lua_register	KEYWORD1
+
+# Auxiliary (luaL_*)
+luaL_checkinteger	KEYWORD1
+luaL_checkstring	KEYWORD1
+luaL_optstring	KEYWORD1
+luaL_optinteger	KEYWORD1
+luaL_error	KEYWORD1
+luaL_argcheck	KEYWORD1

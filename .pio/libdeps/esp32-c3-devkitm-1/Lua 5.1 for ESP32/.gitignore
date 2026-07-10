@@ -1,0 +1,10 @@
+# Optional: ignore IDE and OS clutter if you commit this repo
+.DS_Store
+Thumbs.db
+*.zip
+*.tar.gz
+
+# Uncomment the next two lines if you want to distribute without Lua source
+# (users would run fetch_lua_sources.ps1 after cloning)
+# src/*.c
+# src/*.h

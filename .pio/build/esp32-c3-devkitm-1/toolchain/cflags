@@ -1,3 +1,0 @@
--march=rv32imc_zicsr_zifencei
--mtune=esp-base
-"-specs=/home/Qiless/bareiron/.pio/build/esp32-c3-devkitm-1/specs/picolibc.specs"
