@@ -138,7 +138,13 @@ uint8_t getHeightAtFromAnchors (int rx, int rz, ChunkAnchor *anchor_ptr) {
   );
 
 }
-
+#define CHUNK_CACHE_SIZE 32
+typedef struct {
+    int x, z;
+    uint8_t data[16 * 256 * 16]; // tamanho de um chunk
+    bool valid;
+} chunk_cache_t;
+static chunk_cache_t chunk_cache[CHUNK_CACHE_SIZE];
 uint8_t getHeightAtFromHash (int rx, int rz, int _x, int _z, uint32_t chunk_hash, uint8_t biome) {
 
   if (rx == 0 && rz == 0) {

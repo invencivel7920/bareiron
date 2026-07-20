@@ -3,13 +3,13 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <lua.h>
-#include <lauxlib.h>
-#include <lualib.h>
+
+
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
 #endif
+
 
 #ifdef ESP_PLATFORM
   #include "freertos/FreeRTOS.h"
@@ -43,38 +43,36 @@
 #include "procedures.h"
 #include "serialize.h"
 
+// ============================================================
+//  MACROS DE PERFORMANCE (renomeadas para evitar conflito)
+// ============================================================
+#define BAREIRON_PERF_START()   int64_t _perf_start = GET_TIME()
+#define BAREIRON_PERF_END(msg)  printf("[PERF] %s: %lld us\n", msg, GET_TIME() - _perf_start)
+
+// Flag global de debug (visível em outros arquivos)
+bool debug_mode = false;
+// Variáveis estáticas para reduzir uso de pilha
+static uint8_t uuid[16];
+static char name[16];
+
+// Declaração da função handlePacket (definida abaixo)
+void handlePacket(int client_fd, int length, int packet_id, int state);
+
+// Substituição de get_program_time por esp_timer_get_time no ESP32
+#ifdef ESP_PLATFORM
+  #define GET_TIME() esp_timer_get_time()
+#else
+  // Para outras plataformas, mantém a função original (não mostrada, mas definida em tools.c)
+  extern int64_t get_program_time();
+  #define GET_TIME() get_program_time()
+#endif
+
 /**
  * Routes an incoming packet to its packet handler or procedure.
- *
- * Full disclosure, I think this whole thing is a bit of a mess.
- * The packet handlers started out as having proper error checks and
- * handling, but that turned out to be very tedious and space/time
- * consuming, and didn't really help with resolving errors. Not to mention
- * that all those checks likely compound into a non-negligible performance
- * hit on embedded systems.
- *
- * I think the way forward would be to gut the return values of the packet
- * handlers, as most of them only ever return 0, and others aren't checked
- * here. The length discrepancy checks at the bottom already do a good job
- * at preventing this from derailing completely in case of a bad packet,
- * and I think leaning into those is fine.
- *
- * In other words, I think the sc_/cs_ handlers should be of type `void`,
- * and should simply return early when there's a failure that prevents the
- * server from handling a packet. Any data that's left unhandled/unread
- * will be caught by the length discrepancy checks. That's more or less
- * how it already works, just not explicitly.
- *
- * Why have I not done this yet? Well, I'm close to uploading the video,
- * and I don't want to risk refactoring anything this close to release.
+ * (mantido, mas com variáveis estáticas e sem logs de desenvolvimento)
  */
- lua_State *L;
- void setup_lua() {
-
-void handlePacket (int client_fd, int length, int packet_id, int state) {
-  L = luaL_newstate();
-
-  // Count the amount of bytes received to catch length discrepancies
+void handlePacket(int client_fd, int length, int packet_id, int state) {
+  // Contagem de bytes recebidos para detectar discrepâncias
   uint64_t bytes_received_start = total_bytes_received;
 
   switch (packet_id) {
@@ -85,8 +83,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
       } else if (state == STATE_STATUS) {
         if (sc_statusResponse(client_fd)) break;
       } if (state == STATE_LOGIN) {
-        uint8_t uuid[16];
-        char name[16];
         if (cs_loginStart(client_fd, uuid, name)) break;
         if (reservePlayerData(client_fd, uuid, name)) {
           recv_count = 0;
@@ -105,13 +101,10 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
       break;
 
     case 0x01:
-      // Handle status ping
       if (state == STATE_STATUS) {
-        // No need for a packet handler, just echo back the long verbatim
         writeByte(client_fd, 9);
         writeByte(client_fd, 0x01);
         writeUint64(client_fd, readUint64(client_fd));
-        // Close connection after this
         recv_count = 0;
         return;
       }
@@ -127,39 +120,29 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
         setClientState(client_fd, STATE_CONFIGURATION);
       } else if (state == STATE_CONFIGURATION) {
         printf("Client Acknowledged Configuration\n\n");
-
-        // Enter client into "play" state
         setClientState(client_fd, STATE_PLAY);
         sc_loginPlay(client_fd);
 
         PlayerData *player;
         if (getPlayerData(client_fd, &player)) break;
-
-        // Send full client spawn sequence
         spawnPlayer(player);
 
-        // Register all existing players and spawn their entities
         for (int i = 0; i < MAX_PLAYERS; i ++) {
           if (player_data[i].client_fd == -1) continue;
-          // Note that this will also filter out the joining player
           if (player_data[i].flags & 0x20) continue;
           sc_playerInfoUpdateAddPlayer(client_fd, player_data[i]);
           sc_spawnEntityPlayer(client_fd, player_data[i]);
         }
 
-        // Send information about all other entities (mobs):
-        // Use a random number for the first half of the UUID
-        uint8_t uuid[16];
+        uint8_t uuid_mob[16];
         uint32_t r = fast_rand();
-        memcpy(uuid, &r, 4);
-        // Send allocated living mobs, use ID for second half of UUID
+        memcpy(uuid_mob, &r, 4);
         for (int i = 0; i < MAX_MOBS; i ++) {
           if (mob_data[i].type == 0) continue;
           if ((mob_data[i].data & 31) == 0) continue;
-          memcpy(uuid + 4, &i, 4);
-          // For more info on the arguments here, see the spawnMob function
+          memcpy(uuid_mob + 4, &i, 4);
           sc_spawnEntity(
-            client_fd, -2 - i, uuid,
+            client_fd, -2 - i, uuid_mob,
             mob_data[i].type, mob_data[i].x, mob_data[i].y, mob_data[i].z,
             0, 0
           );
@@ -198,7 +181,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
 
     case 0x1B:
       if (state == STATE_PLAY) {
-        // Serverbound keep-alive (ignored)
         discard_all(client_fd, length, false);
       }
       break;
@@ -217,7 +199,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
         float yaw, pitch;
         uint8_t on_ground;
 
-        // Read player position (and rotation)
         if (packet_id == 0x1D) cs_setPlayerPosition(client_fd, &x, &y, &z, &on_ground);
         else if (packet_id == 0x1F) cs_setPlayerRotation (client_fd, &yaw, &pitch, &on_ground);
         else if (packet_id == 0x20) cs_setPlayerMovementFlags (client_fd, &on_ground);
@@ -229,7 +210,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
         uint8_t block_feet = getBlockAt(player->x, player->y, player->z);
         uint8_t swimming = block_feet >= B_water && block_feet < B_water + 8;
 
-        // Handle fall damage
         if (on_ground) {
           int16_t damage = player->grounded_y - player->y - 3;
           if (damage > 0 && (GAMEMODE == 0 || GAMEMODE == 2) && !swimming) {
@@ -240,47 +220,33 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
           player->grounded_y = player->y;
         }
 
-        // Don't continue if all we got were flags
         if (packet_id == 0x20) break;
 
-        // Update rotation in player data (if applicable)
         if (packet_id != 0x1D) {
           player->yaw = ((short)(yaw + 540) % 360 - 180) * 127 / 180;
           player->pitch = pitch / 90.0f * 127.0f;
         }
 
-        // Whether to broadcast player position to other players
         uint8_t should_broadcast = true;
 
         #ifndef BROADCAST_ALL_MOVEMENT
-          // If applicable, tie movement updates to the tickrate by using
-          // a flag that gets reset on every tick. It might sound better
-          // to just make the tick handler broadcast position updates, but
-          // then we lose precision. While position is stored using integers,
-          // here the client gives us doubles and floats directly.
           should_broadcast = !(player->flags & 0x40);
           if (should_broadcast) player->flags |= 0x40;
         #endif
 
         #ifdef SCALE_MOVEMENT_UPDATES_TO_PLAYER_COUNT
-          // If applicable, broadcast only every client_count-th movement update
           if (++player->packets_since_update < client_count) {
             should_broadcast = false;
           } else {
-            // Note that this does not explicitly set should_broadcast to true
-            // This allows the above BROADCAST_ALL_MOVEMENT check to compound
-            // Whether that's ever favorable is up for debate
             player->packets_since_update = 0;
           }
         #endif
 
         if (should_broadcast) {
-          // If the packet had no rotation data, calculate it from player data
           if (packet_id == 0x1D) {
             yaw = player->yaw * 180 / 127;
             pitch = player->pitch * 90 / 127;
           }
-          // Send current position data to all connected players
           for (int i = 0; i < MAX_PLAYERS; i ++) {
             if (player_data[i].client_fd == -1) continue;
             if (player_data[i].flags & 0x20) continue;
@@ -294,15 +260,8 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
           }
         }
 
-        // Don't continue if all we got was rotation data
         if (packet_id == 0x1F) break;
 
-        // Players send movement packets roughly 20 times per second when
-        // moving, and much less frequently when standing still. We can
-        // use this correlation between actions and packet count to cheaply
-        // simulate hunger with a timer-based system, where the timer ticks
-        // down with each position packet. The timer value itself then
-        // naturally works as a substitute for saturation.
         if (player->saturation == 0) {
           if (player->hunger > 0) player->hunger--;
           player->saturation = 200;
@@ -311,17 +270,13 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
           player->saturation -= 1;
         }
 
-        // Cast the values to short to get integer position
         short cx = x, cy = y, cz = z;
         if (x < 0) cx -= 1;
         if (z < 0) cz -= 1;
-        // Determine the player's chunk coordinates
         short _x = (cx < 0 ? cx - 16 : cx) / 16, _z = (cz < 0 ? cz - 16 : cz) / 16;
-        // Calculate distance between previous and current chunk coordinates
         short dx = _x - (player->x < 0 ? player->x - 16 : player->x) / 16;
         short dz = _z - (player->z < 0 ? player->z - 16 : player->z) / 16;
 
-        // Prevent players from leaving the world
         if (cy < 0) {
           cy = 0;
           player->grounded_y = 0;
@@ -331,15 +286,12 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
           sc_synchronizePlayerPosition(client_fd, cx, 255, cz, player->yaw * 180 / 127, player->pitch * 90 / 127);
         }
 
-        // Update position in player data
         player->x = cx;
         player->y = cy;
         player->z = cz;
 
-        // Exit early if no chunk borders were crossed
         if (dx == 0 && dz == 0) break;
 
-        // Check if the player has recently been in this chunk
         int found = false;
         for (int i = 0; i < VISITED_HISTORY; i ++) {
           if (player->visited_x[i] == _x && player->visited_z[i] == _z) {
@@ -349,7 +301,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
         }
         if (found) break;
 
-        // Update player's recently visited chunks
         for (int i = 0; i < VISITED_HISTORY - 1; i ++) {
           player->visited_x[i] = player->visited_x[i + 1];
           player->visited_z[i] = player->visited_z[i + 1];
@@ -358,51 +309,35 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
         player->visited_z[VISITED_HISTORY - 1] = _z;
 
         uint32_t r = fast_rand();
-        // One in every 4 new chunks spawns a mob
         if ((r & 3) == 0) {
-          // The mob is placed in the middle of the new chunk row,
-          // at a random position within the chunk
           short mob_x = (_x + dx * VIEW_DISTANCE) * 16 + ((r >> 4) & 15);
           short mob_z = (_z + dz * VIEW_DISTANCE) * 16 + ((r >> 8) & 15);
-          // Start at the Y coordinate of the spawning player and move upward
-          // until a valid space is found
           uint8_t mob_y = cy - 8;
           uint8_t b_low = getBlockAt(mob_x, mob_y - 1, mob_z);
           uint8_t b_mid = getBlockAt(mob_x, mob_y, mob_z);
           uint8_t b_top = getBlockAt(mob_x, mob_y + 1, mob_z);
           while (mob_y < 255) {
-            if ( // Solid block below, non-solid(spawnable) at feet and above
-              !isPassableBlock(b_low) &&
-              isPassableSpawnBlock(b_mid) &&
-              isPassableSpawnBlock(b_top)
-            ) break;
+            if (!isPassableBlock(b_low) && isPassableSpawnBlock(b_mid) && isPassableSpawnBlock(b_top)) break;
             b_low = b_mid;
             b_mid = b_top;
             b_top = getBlockAt(mob_x, mob_y + 2, mob_z);
             mob_y ++;
           }
           if (mob_y != 255) {
-            // Spawn passive mobs above ground during the day,
-            // or hostiles underground and during the night
             if ((world_time < 13000 || world_time > 23460) && mob_y > 48) {
               uint32_t mob_choice = (r >> 12) & 3;
-              if (mob_choice == 0) spawnMob(25, mob_x, mob_y, mob_z, 4); // Chicken
-              else if (mob_choice == 1) spawnMob(28, mob_x, mob_y, mob_z, 10); // Cow
-              else if (mob_choice == 2) spawnMob(95, mob_x, mob_y, mob_z, 10); // Pig
-              else if (mob_choice == 3) spawnMob(106, mob_x, mob_y, mob_z, 8); // Sheep
+              if (mob_choice == 0) spawnMob(25, mob_x, mob_y, mob_z, 4);
+              else if (mob_choice == 1) spawnMob(28, mob_x, mob_y, mob_z, 10);
+              else if (mob_choice == 2) spawnMob(95, mob_x, mob_y, mob_z, 10);
+              else if (mob_choice == 3) spawnMob(106, mob_x, mob_y, mob_z, 8);
             } else {
-              spawnMob(145, mob_x, mob_y, mob_z, 20); // Zombie
+              spawnMob(145, mob_x, mob_y, mob_z, 20);
             }
           }
         }
 
         int count = 0;
-        #ifdef DEV_LOG_CHUNK_GENERATION
-          printf("Sending new chunks (%d, %d)\n", _x, _z);
-          clock_t start, end;
-          start = clock();
-        #endif
-
+        // Log removido para economizar CPU
         sc_setCenterChunk(client_fd, _x, _z);
 
         while (dx != 0) {
@@ -426,12 +361,6 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
           dz += dz > 0 ? -1 : 1;
         }
 
-        #ifdef DEV_LOG_CHUNK_GENERATION
-          end = clock();
-          double total_ms = (double)(end - start) / CLOCKS_PER_SEC * 1000;
-          printf("Generated %d chunks in %.0f ms (%.2f ms per chunk)\n", count, total_ms, total_ms / (double)count);
-        #endif
-
       }
       break;
 
@@ -450,7 +379,7 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
     case 0x34:
       if (state == STATE_PLAY) cs_setHeldItem(client_fd);
       break;
-	
+
     case 0x3C:
       if (state == STATE_PLAY) cs_swingArm(client_fd);
       break;
@@ -468,17 +397,12 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
       break;
 
     default:
-      #ifdef DEV_LOG_UNKNOWN_PACKETS
-        printf("Unknown packet: 0x");
-        if (packet_id < 16) printf("0");
-        printf("%X, length: %d, state: %d\n\n", packet_id, length, state);
-      #endif
+      // Log removido
       discard_all(client_fd, length, false);
       break;
 
   }
 
-  // Detect and fix incorrectly parsed packets
   int processed_length = total_bytes_received - bytes_received_start;
   if (processed_length == length) return;
 
@@ -486,33 +410,18 @@ void handlePacket (int client_fd, int length, int packet_id, int state) {
     discard_all(client_fd, length - processed_length, false);
   }
 
-  #ifdef DEV_LOG_LENGTH_DISCREPANCY
-  if (processed_length != 0) {
-    printf("WARNING: Packet 0x");
-    if (packet_id < 16) printf("0");
-    printf("%X parsed incorrectly!\n  Expected: %d, parsed: %d\n\n", packet_id, length, processed_length);
-  }
-  #endif
-  #ifdef DEV_LOG_UNKNOWN_PACKETS
-  if (processed_length == 0) {
-    printf("Unknown packet: 0x");
-    if (packet_id < 16) printf("0");
-    printf("%X, length: %d, state: %d\n\n", packet_id, length, state);
-  }
-  #endif
-
+  // Logs de discrepância removidos
 }
 
 int main () {
-  #ifdef _WIN32 //initialize windows socket
+  #ifdef _WIN32
     WSADATA wsa;
-      if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        fprintf(stderr, "WSAStartup failed\n");
-        exit(EXIT_FAILURE);
-      }
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+      fprintf(stderr, "WSAStartup failed\n");
+      exit(EXIT_FAILURE);
+    }
   #endif
 
-  // Hash the seeds to ensure they're random enough
   world_seed = splitmix64(world_seed);
   printf("World seed (hashed): ");
   for (int i = 3; i >= 0; i --) printf("%X", (unsigned int)((world_seed >> (8 * i)) & 255));
@@ -522,15 +431,12 @@ int main () {
   for (int i = 3; i >= 0; i --) printf("%X", (unsigned int)((rng_seed >> (8 * i)) & 255));
   printf("\n\n");
 
-  // Initialize block changes entries as unallocated
   for (int i = 0; i < MAX_BLOCK_CHANGES; i ++) {
     block_changes[i].block = 0xFF;
   }
 
-  // Start the disk/flash serializer (if applicable)
   if (initSerializer()) exit(EXIT_FAILURE);
 
-  // Initialize all file descriptor references to -1 (unallocated)
   int clients[MAX_PLAYERS], client_index = 0;
   for (int i = 0; i < MAX_PLAYERS; i ++) {
     clients[i] = -1;
@@ -538,7 +444,6 @@ int main () {
     player_data[i].client_fd = -1;
   }
 
-  // Create server TCP socket
   int server_fd, opt = 1;
   struct sockaddr_in server_addr, client_addr;
   socklen_t addr_len = sizeof(client_addr);
@@ -549,16 +454,14 @@ int main () {
     exit(EXIT_FAILURE);
   }
 #ifdef _WIN32
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR,
-      (const char*)&opt, sizeof(opt)) < 0) {
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0) {
 #else
   if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-#endif    
+#endif
     perror("socket options failed");
     exit(EXIT_FAILURE);
   }
 
-  // Bind socket to IP/port
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(PORT);
@@ -569,7 +472,6 @@ int main () {
     exit(EXIT_FAILURE);
   }
 
-  // Listen for incoming connections
   if (listen(server_fd, 5) < 0) {
     perror("listen failed");
     close(server_fd);
@@ -577,10 +479,8 @@ int main () {
   }
   printf("Server listening on port %d...\n", PORT);
 
-  // Make the socket non-blocking
-  // This is necessary to not starve the idle task during slow connections
   #ifdef _WIN32
-    u_long mode = 1;  // 1 = non-blocking
+    u_long mode = 1;
     if (ioctlsocket(server_fd, FIONBIO, &mode) != 0) {
       fprintf(stderr, "Failed to set non-blocking mode\n");
       exit(EXIT_FAILURE);
@@ -590,53 +490,52 @@ int main () {
   fcntl(server_fd, F_SETFL, flags | O_NONBLOCK);
   #endif
 
-  // Track time of last server tick (in microseconds)
-  int64_t last_tick_time = get_program_time();
+  // Usar GET_TIME() macro
+  int64_t last_tick_time = GET_TIME();
 
-  /**
-   * Cycles through all connected clients, handling one packet at a time
-   * from each player. With every iteration, attempts to accept a new
-   * client connection.
-   */
   while (true) {
-    // Check if it's time to yield to the idle task
     task_yield();
 
-    // Attempt to accept a new connection
-    for (int i = 0; i < MAX_PLAYERS; i ++) {
-      if (clients[i] != -1) continue;
-      clients[i] = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
-      // If the accept was successful, make the client non-blocking too
-      if (clients[i] != -1) {
-        printf("New client, fd: %d\n", clients[i]);
-      #ifdef _WIN32
-        u_long mode = 1;
-        ioctlsocket(clients[i], FIONBIO, &mode);
-      #else
-        int flags = fcntl(clients[i], F_GETFL, 0);
-        fcntl(clients[i], F_SETFL, flags | O_NONBLOCK);
-      #endif
-        client_count ++;
+    // Aceitar uma nova conexão por iteração (busca slot livre)
+    int new_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
+    if (new_fd != -1) {
+      // Encontrar slot vazio
+      int slot = -1;
+      for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (clients[i] == -1) { slot = i; break; }
       }
-      break;
+      if (slot != -1) {
+        clients[slot] = new_fd;
+        #ifdef _WIN32
+          u_long mode = 1;
+          ioctlsocket(new_fd, FIONBIO, &mode);
+        #else
+          int flags = fcntl(new_fd, F_GETFL, 0);
+          fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
+        #endif
+        client_count++;
+        printf("New client, fd: %d\n", new_fd);
+      } else {
+        // Sem espaço, rejeitar
+        close(new_fd);
+      }
     }
 
-    // Look for valid connected clients
+    // Processar clientes em round-robin
     client_index ++;
-    if (client_index == MAX_PLAYERS) client_index = 0;
+    if (client_index >= MAX_PLAYERS) client_index = 0;
     if (clients[client_index] == -1) continue;
 
-    // Handle periodic events (server ticks)
-    int64_t time_since_last_tick = get_program_time() - last_tick_time;
-    if (time_since_last_tick > TIME_BETWEEN_TICKS) {
-      handleServerTick(time_since_last_tick);
-      last_tick_time = get_program_time();
+    // Tick do servidor
+    int64_t now = GET_TIME();
+    if (now - last_tick_time > TIME_BETWEEN_TICKS) {
+      handleServerTick(now - last_tick_time);
+      last_tick_time = now;
     }
 
-    // Handle this individual client
     int client_fd = clients[client_index];
 
-    // Check if at least 2 bytes are available for reading
+    // Peek de 2 bytes
     #ifdef _WIN32
     recv_count = recv(client_fd, recv_buffer, 2, MSG_PEEK);
     if (recv_count == 0) {
@@ -646,14 +545,14 @@ int main () {
     if (recv_count == SOCKET_ERROR) {
       int err = WSAGetLastError();
       if (err == WSAEWOULDBLOCK) {
-        continue; // no data yet, keep client alive
+        continue;
       } else {
         disconnectClient(&clients[client_index], 1);
         continue;
       }
     }
     #else
-    recv_count = recv(client_fd, &recv_buffer, 2, MSG_PEEK);
+    recv_count = recv(client_fd, recv_buffer, 2, MSG_PEEK);
     if (recv_count < 2) {
       if (recv_count == 0 || (recv_count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         disconnectClient(&clients[client_index], 1);
@@ -661,63 +560,24 @@ int main () {
       continue;
     }
     #endif
-    // Handle 0xBEEF and 0xFEED packets for dumping/uploading world data
-    #ifdef DEV_ENABLE_BEEF_DUMPS
-    // Received BEEF packet, dump world data and disconnect
-    if (recv_buffer[0] == 0xBE && recv_buffer[1] == 0xEF && getClientState(client_fd) == STATE_NONE) {
-      // Send block changes and player data back to back
-      // The client is expected to know (or calculate) the size of these buffers
-      send_all(client_fd, block_changes, sizeof(block_changes));
-      send_all(client_fd, player_data, sizeof(player_data));
-      // Flush the socket and receive everything left on the wire
-      shutdown(client_fd, SHUT_WR);
-      recv_all(client_fd, recv_buffer, sizeof(recv_buffer), false);
-      // Kick the client
-      disconnectClient(&clients[client_index], 6);
-      continue;
-    }
-    // Received FEED packet, load world data from socket and disconnect
-    if (recv_buffer[0] == 0xFE && recv_buffer[1] == 0xED && getClientState(client_fd) == STATE_NONE) {
-      // Consume 0xFEED bytes (previous read was just a peek)
-      recv_all(client_fd, recv_buffer, 2, false);
-      // Write full buffers straight into memory
-      recv_all(client_fd, block_changes, sizeof(block_changes), false);
-      recv_all(client_fd, player_data, sizeof(player_data), false);
-      // Recover block_changes_count
-      for (int i = 0; i < MAX_BLOCK_CHANGES; i ++) {
-        if (block_changes[i].block == 0xFF) continue;
-        if (block_changes[i].block == B_chest) i += 14;
-        if (i >= block_changes_count) block_changes_count = i + 1;
-      }
-      // Update data on disk
-      writeBlockChangesToDisk(0, block_changes_count);
-      writePlayerDataToDisk();
-      // Kick the client
-      disconnectClient(&clients[client_index], 7);
-      continue;
-    }
-    #endif
 
-    // Read packet length
+    // BEEF/FEED removido (macro desativada)
+
     int length = readVarInt(client_fd);
     if (length == VARNUM_ERROR) {
       disconnectClient(&clients[client_index], 2);
       continue;
     }
-    // Read packet ID
     int packet_id = readVarInt(client_fd);
     if (packet_id == VARNUM_ERROR) {
       disconnectClient(&clients[client_index], 3);
       continue;
     }
-    // Get client connection state
     int state = getClientState(client_fd);
-    // Disconnect on legacy server list ping
     if (state == STATE_NONE && length == 254 && packet_id == 122) {
       disconnectClient(&clients[client_index], 5);
       continue;
     }
-    // Handle packet data
     handlePacket(client_fd, length - sizeVarInt(packet_id), packet_id, state);
     if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
       disconnectClient(&clients[client_index], 4);
@@ -727,13 +587,13 @@ int main () {
   }
 
   close(server_fd);
- 
-  #ifdef _WIN32 //cleanup windows socket
+
+  #ifdef _WIN32
     WSACleanup();
   #endif
 
   printf("Server closed.\n");
-
+  return 0;
 }
 
 #ifdef ESP_PLATFORM
@@ -750,7 +610,8 @@ static void wifi_event_handler (void *arg, esp_event_base_t event_base, int32_t 
     esp_wifi_connect();
   } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
     printf("Got IP, starting server...\n\n");
-    xTaskCreate(bareiron_main, "bareiron", 4096, NULL, 5, NULL);
+    // Pilha reduzida para 2048 bytes
+    xTaskCreate(bareiron_main, "bareiron", 2048, NULL, 5, NULL);
   }
 }
 
@@ -781,6 +642,7 @@ void wifi_init () {
 }
 
 void app_main () {
+
   esp_timer_early_init();
   wifi_init();
 }

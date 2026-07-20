@@ -23,6 +23,12 @@
 #include "crafting.h"
 #include "procedures.h"
 #include "packets.h"
+#include "serialize.h"      // para writeDataToDiskOnInterval
+#include "procedures.h"     // para handlePlayerAction, etc.
+
+// Variáveis externas
+extern void broadcastBlockChange(int x, int y, int z, uint8_t block);
+extern bool debug_mode;     // definida em main.c
 
 // S->C Status Response (server list ping)
 int sc_statusResponse (int client_fd) {
@@ -415,7 +421,7 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   // be overlayed here. This seems to be cheaper than sending actual
   // block light data.
   for (int i = 0; i < block_changes_count; i ++) {
-    #ifdef ALLOW_CHESTS
+    #if ENABLE_ALLOW_CHESTS
       if (block_changes[i].block != B_torch && block_changes[i].block != B_chest) continue;
     #else
       if (block_changes[i].block != B_torch) continue;
@@ -552,7 +558,10 @@ int cs_useItemOn (int client_fd) {
   int z = pos << 26 >> 38;
 
   uint8_t face = readByte(client_fd);
-
+#if ENABLE_BLOCK_LOGS
+  printf("[DEBUG] cs_useItemOn: player %d, face %d, x %d, y %d, z %d\n",
+         client_fd, face, x, y, z);
+#endif
   // ignore cursor position
   readUint32(client_fd);
   readUint32(client_fd);
@@ -568,7 +577,17 @@ int cs_useItemOn (int client_fd) {
   PlayerData *player;
   if (getPlayerData(client_fd, &player)) return 1;
 
+  // Executa a ação de colocar o bloco (modifica o mundo)
   handlePlayerUseItem(player, x, y, z, face);
+
+  // Obtém o novo bloco (após a modificação)
+  uint8_t new_block = getBlockAt(x, y, z);
+
+  // Envia a mudança para todos os jogadores
+  broadcastBlockChange(x, y, z, new_block);
+
+  // Salva no LittleFS (se habilitado)
+  writeDataToDiskOnInterval();
 
   return 0;
 }
@@ -612,8 +631,7 @@ int cs_clickContainer (int client_fd) {
 
   uint8_t slot, count, craft = false;
   uint16_t item;
-  int tmp;
-
+ 
   uint16_t *p_item;
   uint8_t *p_count;
 
@@ -1101,7 +1119,7 @@ int cs_clientStatus (int client_fd) {
   return 0;
 }
 
-// S->C System Chat
+// S->C System Chat (apenas envia, não processa comandos)
 int sc_systemChat (int client_fd, char* message, uint16_t len) {
 
   writeVarInt(client_fd, 5 + len);
@@ -1118,7 +1136,7 @@ int sc_systemChat (int client_fd, char* message, uint16_t len) {
   return 0;
 }
 
-// C->S Chat Message
+// C->S Chat Message (processa comandos e chat)
 int cs_chat (int client_fd) {
 
   // To be safe, cap messages to 32 bytes before the buffer length
@@ -1130,98 +1148,54 @@ int cs_chat (int client_fd) {
   size_t message_len = strlen((char *)recv_buffer);
   uint8_t name_len = strlen(player->name);
 
-  if (recv_buffer[0] != '!') { // Standard chat message
-
-    // Shift message contents forward to make space for player name tag
-    memmove(recv_buffer + name_len + 3, recv_buffer, message_len + 1);
-    // Copy player name to index 1
-    memcpy(recv_buffer + 1, player->name, name_len);
-    // Surround player name with brackets and a space
-    recv_buffer[0] = '<';
-    recv_buffer[name_len + 1] = '>';
-    recv_buffer[name_len + 2] = ' ';
-
-    // Forward message to all connected players
-    for (int i = 0; i < MAX_PLAYERS; i ++) {
-      if (player_data[i].client_fd == -1) continue;
-      if (player_data[i].flags & 0x20) continue;
-      sc_systemChat(player_data[i].client_fd, (char *)recv_buffer, message_len + name_len + 3);
-    }
-
-    goto cleanup;
-  }
-
-  // Handle chat commands
-
-  if (!strncmp((char *)recv_buffer, "!msg", 4)) {
-
-    int target_offset = 5;
-    int target_end_offset = 0;
-    int text_offset = 0;
-
-    // Skip spaces after "!msg"
-    while (recv_buffer[target_offset] == ' ') target_offset++;
-    target_end_offset = target_offset;
-    // Extract target name
-    while (recv_buffer[target_end_offset] != ' ' && recv_buffer[target_end_offset] != '\0' && target_end_offset < 21) target_end_offset++;
-    text_offset = target_end_offset;
-    // Skip spaces before message
-    while (recv_buffer[text_offset] == ' ') text_offset++;
-
-    // Send usage guide if arguments are missing
-    if (target_offset == target_end_offset || target_end_offset == text_offset) {
-      sc_systemChat(client_fd, "§7Usage: !msg <player> <message>", 33);
+  // === COMANDOS ===
+  if (recv_buffer[0] == '/') {
+    // Comando /debug
+    if (strcmp((char *)recv_buffer, "/debug") == 0) {
+      extern bool debug_mode;
+      debug_mode = !debug_mode;
+      sc_systemChat(client_fd, debug_mode ? "Debug ON" : "Debug OFF", 
+                    debug_mode ? 8 : 9);
       goto cleanup;
     }
-
-    // Query the target player
-    PlayerData *target = getPlayerByName(target_offset, target_end_offset, recv_buffer);
-    if (target == NULL) {
-      sc_systemChat(client_fd, "Player not found", 16);
+    // Comando /status
+    if (strcmp((char *)recv_buffer, "/status") == 0) {
+      char buf[128];
+snprintf(buf, sizeof(buf), "Players: %d, Free heap: %u KB",
+         client_count, (unsigned int)(esp_get_free_heap_size() / 1024));
+      sc_systemChat(client_fd, buf, strlen(buf));
       goto cleanup;
     }
-
-    // Format output as a vanilla whisper
-    int name_len = strlen(player->name);
-    int text_len = message_len - text_offset;
-    memmove(recv_buffer + name_len + 24, recv_buffer + text_offset, text_len);
-    snprintf((char *)recv_buffer, sizeof(recv_buffer), "§7§o%s whispers to you:", player->name);
-    recv_buffer[name_len + 23] = ' ';
-    // Send message to target player
-    sc_systemChat(target->client_fd, (char *)recv_buffer, (uint16_t)(name_len + 24 + text_len));
-
-    // Format output for sending player
-    int target_len = target_end_offset - target_offset;
-    memmove(recv_buffer + target_len + 23, recv_buffer + name_len + 24, text_len);
-    snprintf((char *)recv_buffer, sizeof(recv_buffer), "§7§oYou whisper to %s:", target->name);
-    recv_buffer[target_len + 22] = ' ';
-    // Report back to sending player
-    sc_systemChat(client_fd, (char *)recv_buffer, (uint16_t)(target_len + 23 + text_len));
-
+    // Outros comandos (fallback)
+    sc_systemChat(client_fd, "§7Unknown command", 18);
     goto cleanup;
   }
 
-  if (!strncmp((char *)recv_buffer, "!help", 5)) {
-    // Send command guide
-    const char help_msg[] = "§7Commands:\n"
-    "  !msg <player> <message> - Send a private message\n"
-    "  !help - Show this help message";
-    sc_systemChat(client_fd, (char *)help_msg, (uint16_t)sizeof(help_msg) - 1);
-    goto cleanup;
-  }
+  // === CHAT NORMAL ===
+  // Shift message contents forward to make space for player name tag
+  memmove(recv_buffer + name_len + 3, recv_buffer, message_len + 1);
+  // Copy player name to index 1
+  memcpy(recv_buffer + 1, player->name, name_len);
+  // Surround player name with brackets and a space
+  recv_buffer[0] = '<';
+  recv_buffer[name_len + 1] = '>';
+  recv_buffer[name_len + 2] = ' ';
 
-  // Handle fall-through case
-  sc_systemChat(client_fd, "§7Unknown command", 18);
+  // Forward message to all connected players
+  for (int i = 0; i < MAX_PLAYERS; i ++) {
+    if (player_data[i].client_fd == -1) continue;
+    if (player_data[i].flags & 0x20) continue;
+    sc_systemChat(player_data[i].client_fd, (char *)recv_buffer, message_len + name_len + 3);
+  }
 
 cleanup:
-  readUint64(client_fd); // Ignore timestamp
-  readUint64(client_fd); // Ignore salt
-  // Ignore signature (if any)
+  // Ignora campos restantes do pacote
+  readUint64(client_fd); // timestamp
+  readUint64(client_fd); // salt
   uint8_t has_signature = readByte(client_fd);
   if (has_signature) recv_all(client_fd, recv_buffer, 256, false);
-  readVarInt(client_fd); // Ignore message count
-  // Ignore acknowledgement bitmask and checksum
-  recv_all(client_fd, recv_buffer, 4, false);
+  readVarInt(client_fd); // message count
+  recv_all(client_fd, recv_buffer, 4, false); // acknowledgement
 
   return 0;
 }
@@ -1348,5 +1322,4 @@ int sc_registries (int client_fd) {
   send_all(client_fd, tags_bin, sizeof(tags_bin));
 
   return 0;
-
 }

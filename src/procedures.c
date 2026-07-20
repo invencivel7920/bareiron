@@ -33,7 +33,16 @@ void setClientState (int client_fd, int new_state) {
     return;
   }
 }
+// procedures.c
+#include "packets.h"   // para sc_blockUpdate
 
+void broadcastBlockChange(int x, int y, int z, uint8_t block) {
+    for (int i = 0; i < MAX_PLAYERS; i++) {
+        if (player_data[i].client_fd == -1) continue;
+        if (player_data[i].flags & 0x20) continue; // jogador fantasma
+        sc_blockUpdate(player_data[i].client_fd, x, y, z, block);
+    }
+}
 int getClientState (int client_fd) {
   for (int i = 0; i < MAX_PLAYERS * 2; i += 2) {
     if (client_states[i] != client_fd) continue;
