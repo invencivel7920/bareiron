@@ -59,7 +59,7 @@
 #define DISK_SYNC_INTERVAL 15000000
 
 // Sincronizar blocos em intervalo (evita escritas constantes)
-#define DISK_SYNC_BLOCKS_ON_INTERVAL
+// #define DISK_SYNC_BLOCKS_ON_INTERVAL
 
 // Timeout de rede reduzido para 10s
 #define NETWORK_TIMEOUT_TIME 10000000
