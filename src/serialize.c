@@ -4,12 +4,12 @@
 
 // Inclusão do cabeçalho do LittleFS apenas para ESP
 #ifdef ESP_PLATFORM
-#include "esp_littlefs.h"   // Use este cabeçalho (a biblioteca exporta esp_vfs_littlefs_*)
-    #define FILE_PATH "/littlefs/world.bin"
-#else
-    #include <stdio.h>
-    #define FILE_PATH "world.bin"
-#endif
+//#include "esp_littlefs.h"   // Use este cabeçalho (a biblioteca exporta esp_vfs_littlefs_*)
+//    #define FILE_PATH "/littlefs/world.bin"
+//#else
+//    #include <stdio.h>
+ //   #define FILE_PATH "world.bin"
+//#endif
 
 #include "tools.h"
 #include "registries.h"
