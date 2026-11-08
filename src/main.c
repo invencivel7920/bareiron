@@ -92,7 +92,7 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         if (cs_handshake(client_fd)) break;
       } else if (state == STATE_STATUS) {
         if (sc_statusResponse(client_fd)) break;
-      } if (state == STATE_LOGIN) {
+      } else if (state == STATE_LOGIN) {
         if (cs_loginStart(client_fd, uuid, name)) break;
         if (reservePlayerData(client_fd, uuid, name)) {
           recv_count = 0;
