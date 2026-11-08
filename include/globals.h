@@ -27,8 +27,7 @@
 // Modo de jogo: 2 = aventura (menos dano)
 #define GAMEMODE 1
 
-// Distância de renderização reduzida para 1 chunk
-#define VIEW_DISTANCE 4
+#define VIEW_DISTANCE 3
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
 #define TIME_BETWEEN_TICKS 500000
@@ -64,18 +63,22 @@
 // Timeout de rede reduzido para 10s
 #define NETWORK_TIMEOUT_TIME 10000000
 
-// Buffer de recepção reduzido
-#define MAX_RECV_BUF_LEN 128
+// Limite de espera por um pacote parcial: o servidor é single-threaded,
+// então um cliente lento não pode travar tick e os demais jogadores.
+#define RECV_STALL_TIMEOUT_TIME 5000000
+#define SEND_STALL_TIMEOUT_TIME 5000000
+
+// Buffer de recepção (192 suporta Client Information com locale + varints)
+#define MAX_RECV_BUF_LEN 192
 
 // Desabilitar funcionalidades pesadas
 // #define SEND_BRAND
 // #define BROADCAST_ALL_MOVEMENT   // desativado para reduzir tráfego
 #define SCALE_MOVEMENT_UPDATES_TO_PLAYER_COUNT // manter (ajuda com 5 players)
-// #define DO_FLUID_FLOW            // desativado
-// #define ALLOW_CHESTS             // desativado
+
 // #define ENABLE_PLAYER_FLIGHT
-// #define ENABLE_PICKUP_ANIMATION
-// #define ENABLE_CACTUS_DAMAGE
+#define ENABLE_PICKUP_ANIMATION
+#define ENABLE_CACTUS_DAMAGE
 
 // Desabilitar logs de desenvolvimento
 // #define DEV_LOG_UNKNOWN_PACKETS
@@ -98,10 +101,10 @@ extern uint32_t world_seed;
 extern uint32_t rng_seed;
 extern uint16_t world_time;
 extern uint32_t server_ticks;
-extern char motd[];
+extern const char motd[];
 extern uint8_t motd_len;
 #ifdef SEND_BRAND
-  extern char brand[];
+  extern const char brand[];
   extern uint8_t brand_len;
 #endif
 extern uint16_t client_count;

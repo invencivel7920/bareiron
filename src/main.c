@@ -17,6 +17,7 @@
   #include "nvs_flash.h"
   #include "esp_wifi.h"
   #include "esp_event.h"
+  #include "esp_netif.h"
   #include "esp_timer.h"
   #include "lwip/sockets.h"
   #include "lwip/netdb.h"
@@ -27,6 +28,7 @@
     #include <ws2tcpip.h>
   #else
     #include <sys/socket.h>
+    #include <sys/select.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
   #endif
@@ -41,6 +43,7 @@
 #include "worldgen.h"
 #include "registries.h"
 #include "procedures.h"
+#include "websocket.h"
 #include "serialize.h"
 
 // ============================================================
@@ -54,6 +57,8 @@ bool debug_mode = false;
 // Variáveis estáticas para reduzir uso de pilha
 static uint8_t uuid[16];
 static char name[16];
+static int login_ack_pending[1024];
+static int config_sent[1024];
 
 // Declaração da função handlePacket (definida abaixo)
 void handlePacket(int client_fd, int length, int packet_id, int state);
@@ -75,6 +80,11 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
   // Contagem de bytes recebidos para detectar discrepâncias
   uint64_t bytes_received_start = total_bytes_received;
 
+  if (packet_id < 0) {
+    packet_id = readVarInt(client_fd);
+    if ((uint32_t)packet_id == VARNUM_ERROR) return;
+  }
+
   switch (packet_id) {
 
     case 0x00:
@@ -89,23 +99,30 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
           return;
         }
         if (sc_loginSuccess(client_fd, uuid, name)) break;
+        setClientState(client_fd, STATE_CONFIGURATION);
+        if (client_fd >= 0 && client_fd < 1024) login_ack_pending[client_fd] = 1;
       } else if (state == STATE_CONFIGURATION) {
         if (cs_clientInformation(client_fd)) break;
+        if (client_fd >= 0 && client_fd < 1024 && config_sent[client_fd]) break;
+        if (sc_featureFlags(client_fd)) break;
+        if (sc_updateTags(client_fd)) break;
         if (sc_knownPacks(client_fd)) break;
-        if (sc_registries(client_fd)) break;
 
         #ifdef SEND_BRAND
         if (sc_sendPluginMessage(client_fd, "minecraft:brand", (uint8_t *)brand, brand_len)) break;
         #endif
+        if (client_fd >= 0 && client_fd < 1024) config_sent[client_fd] = 1;
       }
       break;
 
     case 0x01:
       if (state == STATE_STATUS) {
+        uint64_t payload = readUint64(client_fd);
         writeByte(client_fd, 9);
         writeByte(client_fd, 0x01);
-        writeUint64(client_fd, readUint64(client_fd));
+        writeUint64(client_fd, payload);
         recv_count = 0;
+        disconnectClient(&client_fd, 0);
         return;
       }
       break;
@@ -118,6 +135,10 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
       if (state == STATE_LOGIN) {
         printf("Client Acknowledged Login\n\n");
         setClientState(client_fd, STATE_CONFIGURATION);
+        if (client_fd >= 0 && client_fd < 1024) login_ack_pending[client_fd] = 0;
+      } else if (state == STATE_CONFIGURATION && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
+        printf("Client Acknowledged Login (late)\n\n");
+        login_ack_pending[client_fd] = 0;
       } else if (state == STATE_CONFIGURATION) {
         printf("Client Acknowledged Configuration\n\n");
         setClientState(client_fd, STATE_PLAY);
@@ -154,9 +175,10 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
 
     case 0x07:
       if (state == STATE_CONFIGURATION) {
-        printf("Received Client's Known Packs\n");
+        if (cs_knownPacks(client_fd)) break;
+        if (sc_registries(client_fd)) break;
         printf("  Finishing configuration\n\n");
-        sc_finishConfiguration(client_fd);
+        if (sc_finishConfiguration(client_fd)) break;
       }
       break;
 
@@ -207,6 +229,20 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         PlayerData *player;
         if (getPlayerData(client_fd, &player)) break;
 
+        // Reject impossible positions (NaN/inf/huge) and long teleports: a
+        // single forged packet could otherwise trigger thousands of chunk
+        // packets in one tick and stall the server.
+        if (packet_id == 0x1D || packet_id == 0x1E) {
+          if (!(x > -3.0e7 && x < 3.0e7 && z > -3.0e7 && z < 3.0e7 && y > -64 && y < 1024)) break;
+          if (x - player->x > 16 || x - player->x < -16 ||
+              z - player->z > 16 || z - player->z < -16 ||
+              y - player->y > 32 || y - player->y < -32) {
+            sc_synchronizePlayerPosition(client_fd, player->x, player->y, player->z,
+                                         player->yaw * 180 / 127, player->pitch * 90 / 127);
+            break;
+          }
+        }
+
         uint8_t block_feet = getBlockAt(player->x, player->y, player->z);
         uint8_t swimming = block_feet >= B_water && block_feet < B_water + 8;
 
@@ -248,7 +284,7 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
             pitch = player->pitch * 90 / 127;
           }
           for (int i = 0; i < MAX_PLAYERS; i ++) {
-            if (player_data[i].client_fd == -1) continue;
+            if (!isPlayClient(player_data[i].client_fd)) continue;
             if (player_data[i].flags & 0x20) continue;
             if (player_data[i].client_fd == client_fd) continue;
             if (packet_id == 0x1F) {
@@ -312,18 +348,19 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         if ((r & 3) == 0) {
           short mob_x = (_x + dx * VIEW_DISTANCE) * 16 + ((r >> 4) & 15);
           short mob_z = (_z + dz * VIEW_DISTANCE) * 16 + ((r >> 8) & 15);
-          uint8_t mob_y = cy - 8;
+          int mob_y = (int)cy - 8;
+          if (mob_y < 1) mob_y = 1;
           uint8_t b_low = getBlockAt(mob_x, mob_y - 1, mob_z);
           uint8_t b_mid = getBlockAt(mob_x, mob_y, mob_z);
           uint8_t b_top = getBlockAt(mob_x, mob_y + 1, mob_z);
-          while (mob_y < 255) {
+          while (mob_y < 80) {
             if (!isPassableBlock(b_low) && isPassableSpawnBlock(b_mid) && isPassableSpawnBlock(b_top)) break;
             b_low = b_mid;
             b_mid = b_top;
             b_top = getBlockAt(mob_x, mob_y + 2, mob_z);
             mob_y ++;
           }
-          if (mob_y != 255) {
+          if (mob_y < 80) {
             if ((world_time < 13000 || world_time > 23460) && mob_y > 48) {
               uint32_t mob_choice = (r >> 12) & 3;
               if (mob_choice == 0) spawnMob(25, mob_x, mob_y, mob_z, 4);
@@ -437,12 +474,13 @@ int main () {
 
   if (initSerializer()) exit(EXIT_FAILURE);
 
-  int clients[MAX_PLAYERS], client_index = 0;
+  int clients[MAX_PLAYERS];
   for (int i = 0; i < MAX_PLAYERS; i ++) {
     clients[i] = -1;
     client_states[i * 2] = -1;
     player_data[i].client_fd = -1;
   }
+  registerClientSlots(clients);
 
   int server_fd, opt = 1;
   struct sockaddr_in server_addr, client_addr;
@@ -477,6 +515,7 @@ int main () {
     close(server_fd);
     exit(EXIT_FAILURE);
   }
+  printf("=== VERSAO NOVA DO CODIGO ===\n");
   printf("Server listening on port %d...\n", PORT);
 
   #ifdef _WIN32
@@ -494,96 +533,167 @@ int main () {
   int64_t last_tick_time = GET_TIME();
 
   while (true) {
-    task_yield();
+    int64_t now = GET_TIME();
+    int64_t wait_us = last_tick_time + TIME_BETWEEN_TICKS - now;
+    if (wait_us < 0) wait_us = 0;
 
-    // Aceitar uma nova conexão por iteração (busca slot livre)
-    int new_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
-    if (new_fd != -1) {
-      // Encontrar slot vazio
-      int slot = -1;
-      for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (clients[i] == -1) { slot = i; break; }
-      }
-      if (slot != -1) {
-        clients[slot] = new_fd;
-        #ifdef _WIN32
-          u_long mode = 1;
-          ioctlsocket(new_fd, FIONBIO, &mode);
-        #else
-          int flags = fcntl(new_fd, F_GETFL, 0);
-          fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
-        #endif
-        client_count++;
-        printf("New client, fd: %d\n", new_fd);
-      } else {
-        // Sem espaço, rejeitar
-        close(new_fd);
-      }
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(server_fd, &read_fds);
+    int max_fd = server_fd;
+    for (int i = 0; i < MAX_PLAYERS; i ++) {
+      if (clients[i] == -1) continue;
+      FD_SET(clients[i], &read_fds);
+      if (clients[i] > max_fd) max_fd = clients[i];
     }
 
-    // Processar clientes em round-robin
-    client_index ++;
-    if (client_index >= MAX_PLAYERS) client_index = 0;
-    if (clients[client_index] == -1) continue;
+    struct timeval timeout;
+    timeout.tv_sec = wait_us / 1000000;
+    timeout.tv_usec = wait_us % 1000000;
 
-    // Tick do servidor
-    int64_t now = GET_TIME();
-    if (now - last_tick_time > TIME_BETWEEN_TICKS) {
+    #ifdef _WIN32
+    int ready = select(0, &read_fds, NULL, NULL, &timeout);
+    if (ready < 0) {
+      if (WSAGetLastError() == WSAEINTR) continue;
+      perror("select failed");
+      break;
+    }
+    #else
+    int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+    if (ready < 0) {
+      if (errno == EINTR) continue;
+      perror("select failed");
+      break;
+    }
+    #endif
+
+    now = GET_TIME();
+    if (now - last_tick_time >= TIME_BETWEEN_TICKS) {
       handleServerTick(now - last_tick_time);
       last_tick_time = now;
     }
 
-    int client_fd = clients[client_index];
-
-    // Peek de 2 bytes
-    #ifdef _WIN32
-    recv_count = recv(client_fd, recv_buffer, 2, MSG_PEEK);
-    if (recv_count == 0) {
-      disconnectClient(&clients[client_index], 1);
-      continue;
+    if (FD_ISSET(server_fd, &read_fds)) {
+      while (true) {
+        int new_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_len);
+        if (new_fd == -1) {
+          #ifdef _WIN32
+          if (WSAGetLastError() != WSAEWOULDBLOCK) perror("accept failed");
+          #else
+          if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) perror("accept failed");
+          #endif
+          break;
+        }
+        int slot = -1;
+        for (int i = 0; i < MAX_PLAYERS; i ++) {
+          if (clients[i] == -1) { slot = i; break; }
+        }
+        if (slot == -1) {
+          #ifdef _WIN32
+          closesocket(new_fd);
+          #else
+          close(new_fd);
+          #endif
+          continue;
+        }
+        clients[slot] = new_fd;
+        #ifdef _WIN32
+        u_long mode = 1;
+        ioctlsocket(new_fd, FIONBIO, &mode);
+        #else
+        int flags = fcntl(new_fd, F_GETFL, 0);
+        fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
+        #endif
+        client_count ++;
+        ws_client_init(new_fd);
+        if (new_fd >= 0 && new_fd < 1024) {
+          login_ack_pending[new_fd] = 0;
+          config_sent[new_fd] = 0;
+        }
+        printf("New client, fd: %d\n", new_fd);
+      }
     }
-    if (recv_count == SOCKET_ERROR) {
-      int err = WSAGetLastError();
-      if (err == WSAEWOULDBLOCK) {
+
+    for (int i = 0; i < MAX_PLAYERS; i ++) {
+      if (clients[i] == -1) continue;
+
+      int client_fd = clients[i];
+
+      // WebSocket buffer may have pending data even if select() didn't report it
+      if (!FD_ISSET(client_fd, &read_fds)) {
+        if (ws_mode(client_fd) != WS_MODE_OPEN || ws_poll(client_fd) <= 0) {
+          continue;
+        }
+      }
+
+      int mode = ws_mode(client_fd);
+      if (mode == WS_MODE_UNKNOWN) {
+        int sniffed = ws_sniff(client_fd);
+        if (sniffed < 0) {
+          disconnectClient(&clients[i], 9);
+          continue;
+        }
+        if (sniffed == 0) continue;
+        mode = ws_mode(client_fd);
+      }
+      if (mode == WS_MODE_HANDSHAKE) {
+        int upgraded = ws_handshake_step(client_fd);
+        if (upgraded < 0) {
+          disconnectClient(&clients[i], 8);
+          continue;
+        }
         continue;
-      } else {
-        disconnectClient(&clients[client_index], 1);
+      }
+
+      int readable = conn_poll_readable(client_fd);
+      if (readable < 0) {
+        disconnectClient(&clients[i], 1);
+        continue;
+      }
+      if (readable == 0) continue;
+      recv_count = 1;
+
+      int length = readVarInt(client_fd);
+      if ((uint32_t)length == VARNUM_ERROR) {
+        // No data available yet; try again later
+        continue;
+      }
+      if ((uint32_t)length > MAX_RECV_BUF_LEN * 8) {
+        printf("ERROR: Invalid packet length %u, disconnecting\n", (unsigned)length);
+        disconnectClient(&clients[i], 2);
+        continue;
+      }
+      int state = getClientState(client_fd);
+      if (state == STATE_LOGIN && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
+        state = STATE_CONFIGURATION;
+      }
+      int packet_id = -1;
+      if (state != STATE_CONFIGURATION) {
+        packet_id = readVarInt(client_fd);
+        if ((uint32_t)packet_id == VARNUM_ERROR) {
+          // No data available yet; try again later
+          continue;
+        }
+        if ((uint32_t)packet_id > 0xFF) {
+          printf("ERROR: Invalid packet id %u, disconnecting\n", (unsigned)packet_id);
+          disconnectClient(&clients[i], 3);
+          continue;
+        }
+      }
+      if (state == STATE_NONE && length == 254 && packet_id == 122) {
+        disconnectClient(&clients[i], 5);
+        continue;
+      }
+      if (length < sizeVarInt(packet_id) || length > 2097152) {
+        disconnectClient(&clients[i], 2);
+        continue;
+      }
+      handlePacket(client_fd, length, packet_id, state);
+      if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+        disconnectClient(&clients[i], 4);
         continue;
       }
     }
-    #else
-    recv_count = recv(client_fd, recv_buffer, 2, MSG_PEEK);
-    if (recv_count < 2) {
-      if (recv_count == 0 || (recv_count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-        disconnectClient(&clients[client_index], 1);
-      }
-      continue;
-    }
-    #endif
-
-    // BEEF/FEED removido (macro desativada)
-
-    int length = readVarInt(client_fd);
-    if (length == VARNUM_ERROR) {
-      disconnectClient(&clients[client_index], 2);
-      continue;
-    }
-    int packet_id = readVarInt(client_fd);
-    if (packet_id == VARNUM_ERROR) {
-      disconnectClient(&clients[client_index], 3);
-      continue;
-    }
-    int state = getClientState(client_fd);
-    if (state == STATE_NONE && length == 254 && packet_id == 122) {
-      disconnectClient(&clients[client_index], 5);
-      continue;
-    }
-    handlePacket(client_fd, length - sizeVarInt(packet_id), packet_id, state);
-    if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
-      disconnectClient(&clients[client_index], 4);
-      continue;
-    }
-
   }
 
   close(server_fd);
@@ -609,14 +719,21 @@ static void wifi_event_handler (void *arg, esp_event_base_t event_base, int32_t 
   } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
     esp_wifi_connect();
   } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-    printf("Got IP, starting server...\n\n");
-    // Pilha reduzida para 2048 bytes
-    xTaskCreate(bareiron_main, "bareiron", 2048, NULL, 5, NULL);
+    ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
+    printf("\nWiFi conectado. IP do servidor: " IPSTR "\n", IP2STR(&event->ip_info.ip));
+    printf("No Minecraft 1.21.8, conecte em: " IPSTR ":25565\n\n", IP2STR(&event->ip_info.ip));
+    // Pilha de 8192 bytes: main() serializa chunks e pacotes no proprio stack.
+    xTaskCreate(bareiron_main, "bareiron", 8192, NULL, 5, NULL);
   }
 }
 
 void wifi_init () {
-  nvs_flash_init();
+  esp_err_t nvs_ret = nvs_flash_init();
+  if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    printf("NVS invalida (0x%X), apagando e reiniciando...\n", nvs_ret);
+    nvs_flash_erase();
+    nvs_flash_init();
+  }
   esp_netif_init();
   esp_event_loop_create_default();
   esp_netif_create_default_wifi_sta();

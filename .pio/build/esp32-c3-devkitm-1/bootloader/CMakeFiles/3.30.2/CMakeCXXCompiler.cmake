@@ -1,4 +1,4 @@
-set(CMAKE_CXX_COMPILER "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-g++")
+set(CMAKE_CXX_COMPILER "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-g++")
 set(CMAKE_CXX_COMPILER_ARG1 "")
 set(CMAKE_CXX_COMPILER_ID "GNU")
 set(CMAKE_CXX_COMPILER_VERSION "15.2.0")
@@ -24,11 +24,11 @@ set(CMAKE_CXX_SIMULATE_VERSION "")
 
 
 
-set(CMAKE_AR "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ar")
-set(CMAKE_CXX_COMPILER_AR "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-gcc-ar")
-set(CMAKE_RANLIB "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ranlib")
-set(CMAKE_CXX_COMPILER_RANLIB "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-gcc-ranlib")
-set(CMAKE_LINKER "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ld")
+set(CMAKE_AR "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ar")
+set(CMAKE_CXX_COMPILER_AR "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-gcc-ar")
+set(CMAKE_RANLIB "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ranlib")
+set(CMAKE_CXX_COMPILER_RANLIB "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-gcc-ranlib")
+set(CMAKE_LINKER "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-ld")
 set(CMAKE_LINKER_LINK "")
 set(CMAKE_LINKER_LLD "")
 set(CMAKE_CXX_COMPILER_LINKER "NOTFOUND")
@@ -87,9 +87,9 @@ endif()
 
 
 
-set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0/riscv32-esp-elf;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0/backward;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0/include;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0/include-fixed;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include")
+set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0/riscv32-esp-elf;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/15.2.0/backward;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0/include;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0/include-fixed;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include")
 set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "gcc;c;nosys;c;gcc")
-set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/lib/gcc;/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/lib")
+set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/lib/gcc/riscv32-esp-elf/15.2.0;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/lib/gcc;/home/astronauta/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/lib")
 set(CMAKE_CXX_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES "")
 set(CMAKE_CXX_COMPILER_CLANG_RESOURCE_DIR "")
 

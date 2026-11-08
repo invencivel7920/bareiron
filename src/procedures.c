@@ -15,8 +15,14 @@
 #include "structures.h"
 #include "serialize.h"
 #include "procedures.h"
+#include "websocket.h"
 
 int client_states[MAX_PLAYERS * 2];
+static int *client_slots = NULL;
+
+void registerClientSlots (int *slots) {
+  client_slots = slots;
+}
 
 void setClientState (int client_fd, int new_state) {
   // Look for a client state with a matching file descriptor
@@ -36,9 +42,10 @@ void setClientState (int client_fd, int new_state) {
 // procedures.c
 #include "packets.h"   // para sc_blockUpdate
 
+
 void broadcastBlockChange(int x, int y, int z, uint8_t block) {
     for (int i = 0; i < MAX_PLAYERS; i++) {
-        if (player_data[i].client_fd == -1) continue;
+        if (!isPlayClient(player_data[i].client_fd)) continue;
         if (player_data[i].flags & 0x20) continue; // jogador fantasma
         sc_blockUpdate(player_data[i].client_fd, x, y, z, block);
     }
@@ -49,6 +56,10 @@ int getClientState (int client_fd) {
     return client_states[i + 1];
   }
   return STATE_NONE;
+}
+
+bool isPlayClient (int client_fd) {
+  return client_fd != -1 && getClientState(client_fd) == STATE_PLAY;
 }
 
 int getClientIndex (int client_fd) {
@@ -138,7 +149,7 @@ int getPlayerData (int client_fd, PlayerData **output) {
 // Returns the player with the given name, or NULL if not found
 PlayerData *getPlayerByName (int start_offset, int end_offset, uint8_t *buffer) {
   for (int i = 0; i < MAX_PLAYERS; i ++) {
-    if (player_data[i].client_fd == -1) continue;
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     int j;
     for (j = start_offset; j < end_offset && j < 256 && buffer[j] != ' '; j++) {
       if (player_data[i].name[j - start_offset] != buffer[j]) break;
@@ -164,6 +175,7 @@ void handlePlayerDisconnect (int client_fd) {
     strcpy((char *)recv_buffer + player_name_len, " left the game");
     // Broadcast this player's leave to all other connected clients
     for (int j = 0; j < MAX_PLAYERS; j ++) {
+      if (!isPlayClient(player_data[j].client_fd)) continue;
       if (player_data[j].client_fd == client_fd) continue;
       if (player_data[j].flags & 0x20) continue;
       // Send chat message
@@ -192,6 +204,7 @@ void handlePlayerJoin (PlayerData* player) {
 
   // Inform other clients (and the joining client) of the player's name and entity
   for (int i = 0; i < MAX_PLAYERS; i ++) {
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     sc_systemChat(player_data[i].client_fd, (char *)recv_buffer, 16 + player_name_len);
     sc_playerInfoUpdateAddPlayer(player_data[i].client_fd, *player);
     if (player_data[i].client_fd != player->client_fd) {
@@ -207,17 +220,24 @@ void handlePlayerJoin (PlayerData* player) {
 
 void disconnectClient (int *client_fd, int cause) {
   if (*client_fd == -1) return;
-  client_count --;
-  setClientState(*client_fd, STATE_NONE);
-  handlePlayerDisconnect(*client_fd);
+  int fd = *client_fd;
+  if (client_count > 0) client_count --;
+  setClientState(fd, STATE_NONE);
+  handlePlayerDisconnect(fd);
+  ws_client_close(fd);
   #ifdef _WIN32
-  closesocket(*client_fd);
-  printf("Disconnected client %d, cause: %d, errno: %d\n", *client_fd, cause, WSAGetLastError());
+  closesocket(fd);
+  printf("Disconnected client %d, cause: %d, errno: %d\n", fd, cause, WSAGetLastError());
   #else
-  close(*client_fd);
-  printf("Disconnected client %d, cause: %d, errno: %d\n\n", *client_fd, cause, errno);
+  close(fd);
+  printf("Disconnected client %d, cause: %d, errno: %d\n\n", fd, cause, errno);
   #endif
   *client_fd = -1;
+  if (client_slots) {
+    for (int i = 0; i < MAX_PLAYERS; i ++) {
+      if (client_slots[i] == fd) client_slots[i] = -1;
+    }
+  }
 }
 
 uint8_t serverSlotToClientSlot (int window_id, uint8_t slot) {
@@ -446,7 +466,7 @@ void broadcastMobMetadata (int client_fd, int entity_id) {
   if (mob_index < 0 || mob_index >= MAX_MOBS) return;
   MobData *mob = &mob_data[mob_index];
 
-  EntityData *metadata;
+  EntityData metadata[1];
   size_t length;
 
   switch (mob->type) {
@@ -454,7 +474,6 @@ void broadcastMobMetadata (int client_fd, int entity_id) {
       if (!((mob->data >> 5) & 1)) // Don't send metadata if sheep isn't sheared
         return;
 
-      metadata = malloc(sizeof *metadata);
       metadata[0] = (EntityData){
         17,                // Index (Sheep Bit Mask),
         0,                 // Type (Byte),
@@ -480,8 +499,6 @@ void broadcastMobMetadata (int client_fd, int entity_id) {
   } else {
     sc_setEntityMetadata(client_fd, entity_id, metadata, length);
   }
-
-  free(metadata);
 }
 
 uint8_t getBlockChange (short x, uint8_t y, short z) {
@@ -502,13 +519,14 @@ uint8_t getBlockChange (short x, uint8_t y, short z) {
 
 // Handle running out of memory for new block changes
 void failBlockChange (short x, uint8_t y, short z, uint8_t block) {
+  (void) block;
 
   // Get previous block at this location
   uint8_t before = getBlockAt(x, y, z);
 
   // Broadcast a new update to all players
   for (int i = 0; i < MAX_PLAYERS; i ++) {
-    if (player_data[i].client_fd == -1) continue;
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     if (player_data[i].flags & 0x20) continue;
     // Reset the block they tried to change
     sc_blockUpdate(player_data[i].client_fd, x, y, z, before);
@@ -518,11 +536,11 @@ void failBlockChange (short x, uint8_t y, short z, uint8_t block) {
 
 }
 
-uint8_t makeBlockChange (short x, uint8_t y, short z, uint8_t block) {
+static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
 
   // Transmit block update to all in-game clients
   for (int i = 0; i < MAX_PLAYERS; i ++) {
-    if (player_data[i].client_fd == -1) continue;
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     if (player_data[i].flags & 0x20) continue;
     sc_blockUpdate(player_data[i].client_fd, x, y, z, block);
   }
@@ -532,7 +550,9 @@ uint8_t makeBlockChange (short x, uint8_t y, short z, uint8_t block) {
   // store blocks that don't differ from the base terrain.
   ChunkAnchor anchor = {
     x / CHUNK_SIZE,
-    z / CHUNK_SIZE
+    z / CHUNK_SIZE,
+    0,
+    0
   };
   if (x % CHUNK_SIZE < 0) anchor.x --;
   if (z % CHUNK_SIZE < 0) anchor.z --;
@@ -653,6 +673,34 @@ uint8_t makeBlockChange (short x, uint8_t y, short z, uint8_t block) {
     block_changes_count ++;
   }
 
+  return 0;
+}
+
+static uint8_t isFallingBlock (uint8_t block) {
+  return block == B_sand || block == B_red_sand || block == B_gravel;
+}
+
+static void settleFallingBlocks (short x, uint8_t y, short z) {
+  for (int sy = y; sy <= (int)y + 64 && sy <= 80; sy ++) {
+    uint8_t block = getBlockAt(x, sy, z);
+    if (!isFallingBlock(block)) {
+      if (sy == y) continue;
+      break;
+    }
+    int dy = sy;
+    while (dy > 0 && isReplaceableBlock(getBlockAt(x, dy - 1, z))) dy --;
+    if (dy == sy) {
+      if (sy == y) continue;
+      break;
+    }
+    if (storeBlockChange(x, dy, z, block)) break;
+    storeBlockChange(x, sy, z, 0);
+  }
+}
+
+uint8_t makeBlockChange (short x, uint8_t y, short z, uint8_t block) {
+  if (storeBlockChange(x, y, z, block)) return 1;
+  if (isReplaceableBlock(block) || isFallingBlock(block)) settleFallingBlocks(x, y, z);
   return 0;
 }
 
@@ -1185,6 +1233,10 @@ void handlePlayerAction (PlayerData *player, int action, short x, short y, short
   // Ignore further actions not pertaining to mining blocks
   if (action != 0 && action != 2) return;
 
+  if (y < 0 || y > 80) return;
+  if (x < player->x - 8 || x > player->x + 8) return;
+  if (z < player->z - 8 || z > player->z + 8) return;
+
   // In creative, only the "start mining" action is sent
   // No additional verification is performed, the block is simply removed
   if (action == 0 && GAMEMODE == 1) {
@@ -1237,6 +1289,12 @@ void handlePlayerAction (PlayerData *player, int action, short x, short y, short
 }
 
 void handlePlayerUseItem (PlayerData *player, short x, short y, short z, uint8_t face) {
+
+  if (face != 255) {
+    if (y < 0 || y > 80) return;
+    if (x < player->x - 8 || x > player->x + 8) return;
+    if (z < player->z - 8 || z > player->z + 8) return;
+  }
 
   // Get targeted block (if coordinates are provided)
   uint8_t target = face == 255 ? 0 : getBlockAt(x, y, z);
@@ -1336,13 +1394,26 @@ void handlePlayerUseItem (PlayerData *player, short x, short y, short z, uint8_t
     // Swap to held piece of armor
     uint8_t slot = getArmorItemSlot(*item);
     uint16_t prev_item = player->inventory_items[slot];
+    uint8_t prev_count = player->inventory_count[slot];
+
+    // Taking one piece off a stack only works when the old armor piece can
+    // go back into the hotbar; otherwise it would be deleted.
+    if (prev_item != 0 && *count > 1) return;
+
+    bool stack_left = prev_item == 0 && *count > 1;
+    if (stack_left) (*count) --;
+
     player->inventory_items[slot] = *item;
     player->inventory_count[slot] = 1;
-    player->inventory_items[player->hotbar] = prev_item;
-    player->inventory_count[player->hotbar] = 1;
+    if (!stack_left) {
+      player->inventory_items[player->hotbar] = prev_item;
+      player->inventory_count[player->hotbar] = prev_count;
+    }
+
     // Update client inventory
     sc_setContainerSlot(player->client_fd, -2, serverSlotToClientSlot(0, slot), 1, *item);
-    sc_setContainerSlot(player->client_fd, -2, serverSlotToClientSlot(0, player->hotbar), 1, prev_item);
+    sc_setContainerSlot(player->client_fd, -2, serverSlotToClientSlot(0, player->hotbar),
+                        player->inventory_count[player->hotbar], player->inventory_items[player->hotbar]);
     return;
   }
 
@@ -1362,6 +1433,8 @@ void handlePlayerUseItem (PlayerData *player, short x, short y, short z, uint8_t
     case 5: x += 1; break;
     default: break;
   }
+
+  if (y > 80) return;
 
   // Check if the block's placement conditions are met
   if (
@@ -1416,7 +1489,7 @@ void spawnMob (uint8_t type, short x, uint8_t y, short z, uint8_t health) {
 
     // Broadcast entity creation to all players
     for (int j = 0; j < MAX_PLAYERS; j ++) {
-      if (player_data[j].client_fd == -1) continue;
+      if (!isPlayClient(player_data[j].client_fd)) continue;
       sc_spawnEntity(
         player_data[j].client_fd,
         -2 - i, // Use negative IDs to avoid conflicts with player IDs
@@ -1614,7 +1687,7 @@ void hurtEntity (int entity_id, int attacker_id, uint8_t damage_type, uint8_t da
   // Broadcast damage event to all players
   for (int i = 0; i < MAX_PLAYERS; i ++) {
     int client_fd = player_data[i].client_fd;
-    if (client_fd == -1) continue;
+    if (!isPlayClient(client_fd)) continue;
     sc_damageEvent(client_fd, entity_id, damage_type);
     // Below this, handle death events
     if (!entity_died) continue;
@@ -1724,7 +1797,7 @@ void handleServerTick (int64_t time_since_last_tick) {
       }
       mob_data[i].type = 0;
       for (int j = 0; j < MAX_PLAYERS; j ++) {
-        if (player_data[j].client_fd == -1) continue;
+        if (!isPlayClient(player_data[j].client_fd)) continue;
         // Spawn death smoke particles
         sc_entityEvent(player_data[j].client_fd, entity_id, 60);
         // Remove the entity from the client
@@ -1775,7 +1848,7 @@ void handleServerTick (int64_t time_since_last_tick) {
     PlayerData* closest_player = &player_data[0];
     uint32_t closest_dist = 2147483647;
     for (int j = 0; j < MAX_PLAYERS; j ++) {
-      if (player_data[j].client_fd == -1) continue;
+      if (!isPlayClient(player_data[j].client_fd)) continue;
       uint16_t curr_dist = (
         abs(mob_data[i].x - player_data[j].x) +
         abs(mob_data[i].z - player_data[j].z)
@@ -1921,7 +1994,7 @@ void handleServerTick (int64_t time_since_last_tick) {
 
     // Broadcast relevant entity movement packets
     for (int j = 0; j < MAX_PLAYERS; j ++) {
-      if (player_data[j].client_fd == -1) continue;
+      if (!isPlayClient(player_data[j].client_fd)) continue;
       sc_teleportEntity (
         player_data[j].client_fd, entity_id,
         (double)new_x + 0.5, new_y, (double)new_z + 0.5,
@@ -1940,7 +2013,7 @@ void handleServerTick (int64_t time_since_last_tick) {
 void broadcastChestUpdate (int origin_fd, uint8_t *storage_ptr, uint16_t item, uint8_t count, uint8_t slot) {
 
   for (int i = 0; i < MAX_PLAYERS; i ++) {
-    if (player_data[i].client_fd == -1) continue;
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     if (player_data[i].flags & 0x20) continue;
     // Filter for players that have this chest open
     if (memcmp(player_data[i].craft_items, &storage_ptr, sizeof(storage_ptr)) != 0) continue;

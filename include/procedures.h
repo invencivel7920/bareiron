@@ -9,6 +9,8 @@ extern int client_states[MAX_PLAYERS * 2];
 
 void setClientState (int client_fd, int new_state);
 int getClientState (int client_fd);
+void registerClientSlots (int *slots);
+bool isPlayClient (int client_fd);
 int getClientIndex (int client_fd);
 void broadcastBlockChange(int x, int y, int z, uint8_t block);
 void resetPlayerData (PlayerData *player);

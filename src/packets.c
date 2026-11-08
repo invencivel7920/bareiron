@@ -35,6 +35,7 @@ int sc_statusResponse (int client_fd) {
 
   char header[] = "{"
     "\"version\":{\"name\":\"1.21.8\",\"protocol\":772},"
+    "\"players\":{\"max\":10,\"online\":0},"
     "\"description\":{\"text\":\"";
   char footer[] = "\"}}";
 
@@ -61,7 +62,7 @@ int cs_handshake (int client_fd) {
   printf("  Server address: %s\n", recv_buffer);
   printf("  Server port: %u\n", readUint16(client_fd));
   int intent = readVarInt(client_fd);
-  if (intent == VARNUM_ERROR) return 1;
+  if (intent == (int)VARNUM_ERROR) return 1;
   printf("  Intent: %d\n\n", intent);
   setClientState(client_fd, intent);
 
@@ -106,40 +107,56 @@ int cs_clientInformation (int client_fd) {
   int tmp;
   printf("Received Client Information:\n");
   readString(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count == -1) return 0;
   printf("  Locale: %s\n", recv_buffer);
-  tmp = readByte(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count <= 0) return 0;
+  tmp = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   printf("  View distance: %d\n", tmp);
   tmp = readVarInt(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   printf("  Chat mode: %d\n", tmp);
-  tmp = readByte(client_fd);
-  if (recv_count == -1) return 1;
+  tmp = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   if (tmp) printf("  Chat colors: on\n");
   else printf("  Chat colors: off\n");
-  tmp = readByte(client_fd);
-  if (recv_count == -1) return 1;
+  tmp = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   printf("  Skin parts: %d\n", tmp);
   tmp = readVarInt(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   if (tmp) printf("  Main hand: right\n");
   else printf("  Main hand: left\n");
-  tmp = readByte(client_fd);
-  if (recv_count == -1) return 1;
+  tmp = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   if (tmp) printf("  Text filtering: on\n");
   else printf("  Text filtering: off\n");
-  tmp = readByte(client_fd);
-  if (recv_count == -1) return 1;
+  tmp = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   if (tmp) printf("  Allow listing: on\n");
   else printf("  Allow listing: off\n");
   tmp = readVarInt(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
   printf("  Particles: %d\n\n", tmp);
   return 0;
 }
 
 // S->C Clientbound Known Packs
+int cs_knownPacks (int client_fd) {
+  printf("Received Client's Known Packs\n");
+  int32_t count = readVarInt(client_fd);
+  if (recv_count == VARNUM_ERROR || count < 0 || count > 100) return 1;
+  for (int i = 0; i < count; i ++) {
+    readString(client_fd);
+    if (recv_count == -1) return 1;
+    readString(client_fd);
+    if (recv_count == -1) return 1;
+    readString(client_fd);
+    if (recv_count == -1) return 1;
+  }
+  return 0;
+}
+
 int sc_knownPacks (int client_fd) {
   printf("Sending Server's Known Packs\n\n");
   char known_packs[] = {
@@ -153,15 +170,24 @@ int sc_knownPacks (int client_fd) {
   return 0;
 }
 
+int sc_featureFlags (int client_fd) {
+  writeVarInt(client_fd, 20);
+  writeByte(client_fd, 0x0C);
+  writeVarInt(client_fd, 1);
+  writeVarInt(client_fd, 17);
+  send_all(client_fd, (const uint8_t *)"minecraft:vanilla", 17);
+  return 0;
+}
+
 // C->S Serverbound Plugin Message
 int cs_pluginMessage (int client_fd) {
   printf("Received Plugin Message:\n");
   readString(client_fd);
-  if (recv_count == -1) return 1;
+  if (recv_count == -1) return 0;
   printf("  Channel: \"%s\"\n", recv_buffer);
   if (strcmp((char *)recv_buffer, "minecraft:brand") == 0) {
     readString(client_fd);
-    if (recv_count == -1) return 1;
+    if (recv_count == -1) return 0;
     printf("  Brand: \"%s\"\n", recv_buffer);
   }
   printf("\n");
@@ -337,8 +363,19 @@ int sc_setCenterChunk (int client_fd, int x, int y) {
 // S->C Chunk Data and Update Light
 int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
-  const int chunk_data_size = (4101 + sizeVarInt(256) + sizeof(network_block_palette)) * 20 + 6 * 12;
-  const int light_data_size = 14 + (sizeVarInt(2048) + 2048) * 26;
+  int max_change_y = -1;
+  for (int i = 0; i < block_changes_count; i ++) {
+    if (block_changes[i].block != 0xFF && block_changes[i].y > max_change_y)
+      max_change_y = block_changes[i].y;
+  }
+
+  // O terreno acima de y=80 é sempre ar, então essas seções podem ir como
+  // seções uniformes de 6 bytes em vez do palette completo de 4,6 KB.
+  const int terrain_sections = (max_change_y >= 96) ? 20 : 6;
+
+  const int chunk_data_size = (4101 + sizeVarInt(256) + sizeof(network_block_palette)) * terrain_sections
+                            + 6 * (4 + 20 - terrain_sections);
+  const int light_data_size = 14 + (sizeVarInt(2048) + 2048) * 24;
 
   writeVarInt(client_fd, 11 + sizeVarInt(chunk_data_size) + chunk_data_size + light_data_size);
   writeByte(client_fd, 0x27);
@@ -352,67 +389,55 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
   int x = _x * 16, z = _z * 16, y;
 
-  // send 4 chunk sections (up to Y=0) with no blocks
-  for (int i = 0; i < 4; i ++) {
-    writeUint16(client_fd, 4096); // block count
-    writeByte(client_fd, 0); // block bits
-    writeVarInt(client_fd, 85); // block palette (bedrock)
-    writeByte(client_fd, 0); // biome bits
-    writeByte(client_fd, 0); // biome palette
-  }
-  // yield to idle task
+  static const uint8_t empty_bedrock[6] = { 0x10, 0x00, 0x00, 0x55, 0x00, 0x00 };
+  static const uint8_t empty_air[6] = { 0x10, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  static uint8_t section_prefix[5 + sizeof(network_block_palette)];
+  uint8_t bulk[84];
+
+  section_prefix[0] = 0x10; // block count 4096
+  section_prefix[1] = 0x00;
+  section_prefix[2] = 8; // bits per entry
+  section_prefix[3] = 0x80; // block palette length 256
+  section_prefix[4] = 0x02;
+  memcpy(section_prefix + 5, network_block_palette, sizeof(network_block_palette));
+
+  // 4 bedrock sections
+  for (int i = 0; i < 4; i ++) memcpy(bulk + i * 6, empty_bedrock, 6);
+  send_all(client_fd, bulk, 24);
   task_yield();
 
-  // send chunk sections
-  for (int i = 0; i < 20; i ++) {
+  for (int i = 0; i < terrain_sections; i ++) {
     y = i * 16;
-    writeUint16(client_fd, 4096); // block count
-    writeByte(client_fd, 8); // bits per entry
-    writeVarInt(client_fd, 256); // block palette length
-    // block palette as varint buffer
-    send_all(client_fd, network_block_palette, sizeof(network_block_palette));
-    // chunk section buffer
+    send_all(client_fd, section_prefix, sizeof(section_prefix));
     uint8_t biome = buildChunkSection(x, y, z);
     send_all(client_fd, chunk_section, 4096);
-    // biome data
-    writeByte(client_fd, 0); // bits per entry
-    writeByte(client_fd, biome); // biome palette
-    // yield to idle task
+    uint8_t tail[2] = { 0, biome };
+    send_all(client_fd, tail, 2);
     task_yield();
   }
 
-  // send 8 chunk sections (up to Y=192) with no blocks
-  for (int i = 0; i < 8; i ++) {
-    writeUint16(client_fd, 4096); // block count
-    writeByte(client_fd, 0); // block bits
-    writeVarInt(client_fd, 0); // block palette (air)
-    writeByte(client_fd, 0); // biome bits
-    writeByte(client_fd, 0); // biome palette
-  }
-  // yield to idle task
+  int empty_sections = 20 - terrain_sections;
+  for (int i = 0; i < empty_sections; i ++) memcpy(bulk + i * 6, empty_air, 6);
+  if (empty_sections) send_all(client_fd, bulk, empty_sections * 6);
   task_yield();
 
   writeVarInt(client_fd, 0); // omit block entities
 
-  // light data
+  // light data: the world is 384 blocks tall, so exactly 24 light sections.
+  // Every section gets full skylight; there is no light engine to compute
+  // occlusion, and sending zeros for the lower sections left the surface
+  // (y 48..63) pitch black.
   writeVarInt(client_fd, 1);
-  writeUint64(client_fd, 0b11111111111111111111111111);
+  writeUint64(client_fd, 0b111111111111111111111111);
   writeVarInt(client_fd, 0);
   writeVarInt(client_fd, 0);
   writeVarInt(client_fd, 0);
 
-  // sky light array
-  writeVarInt(client_fd, 26);
-  for (int i = 0; i < 2048; i ++) chunk_section[i] = 0xFF;
-  for (int i = 2048; i < 4096; i ++) chunk_section[i] = 0;
-  for (int i = 0; i < 8; i ++) {
-    writeVarInt(client_fd, 2048);
-    send_all(client_fd, chunk_section + 2048, 2048);
-  }
-  for (int i = 0; i < 18; i ++) {
-    writeVarInt(client_fd, 2048);
-    send_all(client_fd, chunk_section, 2048);
-  }
+  chunk_section[0] = 0x80;
+  chunk_section[1] = 0x10;
+  memset(chunk_section + 2, 0xFF, 2048);
+  writeVarInt(client_fd, 24);
+  for (int i = 0; i < 24; i ++) send_all(client_fd, chunk_section, 2050);
   // don't send block light
   writeVarInt(client_fd, 0);
 
@@ -421,7 +446,7 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   // be overlayed here. This seems to be cheaper than sending actual
   // block light data.
   for (int i = 0; i < block_changes_count; i ++) {
-    #if ENABLE_ALLOW_CHESTS
+    #ifdef ALLOW_CHESTS
       if (block_changes[i].block != B_torch && block_changes[i].block != B_chest) continue;
     #else
       if (block_changes[i].block != B_torch) continue;
@@ -533,8 +558,8 @@ int sc_openScreen (int client_fd, uint8_t window, const char *title, uint16_t le
 // C->S Use Item
 int cs_useItem (int client_fd) {
 
-  uint8_t hand = readByte(client_fd);
-  int sequence = readVarInt(client_fd);
+  (void) readByte(client_fd);
+  (void) readVarInt(client_fd);
 
   // Ignore yaw/pitch
   recv_all(client_fd, recv_buffer, 8, false);
@@ -550,7 +575,7 @@ int cs_useItem (int client_fd) {
 // C->S Use Item On
 int cs_useItemOn (int client_fd) {
 
-  uint8_t hand = readByte(client_fd);
+  (void) readByte(client_fd);
 
   int64_t pos = readInt64(client_fd);
   int x = pos >> 38;
@@ -608,12 +633,25 @@ int cs_clickContainer (int client_fd) {
   PlayerData *player;
   if (getPlayerData(client_fd, &player)) return 1;
 
+  // Only accept windows the server opened itself
+  if (window_id != 0 && window_id != 12 && window_id != 14
+  #ifdef ALLOW_CHESTS
+      && window_id != 2
+  #endif
+  ) return 1;
+  #ifdef ALLOW_CHESTS
+  if (window_id == 2 && !(player->flags & 0x80)) return 1;
+  #endif
+  if (changes_count < 0 || changes_count > 128) return 1;
+
   uint8_t apply_changes = true;
   // prevent dropping items
   if (mode == 4 && clicked_slot != -999) {
     // when using drop button, re-sync the respective slot
     uint8_t slot = clientSlotToServerSlot(window_id, clicked_slot);
-    sc_setContainerSlot(client_fd, window_id, clicked_slot, player->inventory_count[slot], player->inventory_items[slot]);
+    if (slot != 255) {
+      sc_setContainerSlot(client_fd, window_id, clicked_slot, player->inventory_count[slot], player->inventory_items[slot]);
+    }
     apply_changes = false;
   } else if (mode == 0 && clicked_slot == -999) {
     // when clicking outside inventory, return the dropped item to the player
@@ -644,26 +682,30 @@ int cs_clickContainer (int client_fd) {
   for (int i = 0; i < changes_count; i ++) {
 
     slot = clientSlotToServerSlot(window_id, readUint16(client_fd));
+    uint8_t valid_slot = slot != 255;
     // slots outside of the inventory overflow into the crafting buffer
-    if (slot > 40 && apply_changes) craft = true;
+    if (slot > 40 && valid_slot && apply_changes) craft = true;
+
+    p_item = NULL;
+    p_count = NULL;
 
     #ifdef ALLOW_CHESTS
-    if (window_id == 2 && slot > 40) {
+    if (valid_slot && window_id == 2 && slot > 40) {
       // Get item pointers from the player's storage pointer
       // See the handlePlayerUseItem function for more info on this hack
       p_item = (uint16_t *)(storage_ptr + (slot - 41) * 3);
       p_count = storage_ptr + (slot - 41) * 3 + 2;
     } else
     #endif
-    {
+    if (valid_slot) {
       // Prevent accessing crafting-related slots when craft_items is locked
-      if (slot > 40 && player->flags & 0x80) return 1;
+      if (slot > 40 && (player->flags & 0x80)) return 1;
       p_item = &player->inventory_items[slot];
       p_count = &player->inventory_count[slot];
     }
 
     if (!readByte(client_fd)) { // no item?
-      if (slot != 255 && apply_changes) {
+      if (valid_slot && apply_changes) {
         *p_item = 0;
         *p_count = 0;
         #ifdef ALLOW_CHESTS
@@ -682,7 +724,7 @@ int cs_clickContainer (int client_fd) {
     readLengthPrefixedData(client_fd);
     readLengthPrefixedData(client_fd);
 
-    if (count > 0 && apply_changes) {
+    if (count > 0 && apply_changes && valid_slot) {
       *p_item = item;
       *p_count = count;
       #ifdef ALLOW_CHESTS
@@ -868,9 +910,8 @@ int cs_closeContainer (int client_fd) {
     }
     player->craft_items[i] = 0;
     player->craft_count[i] = 0;
-    // Unlock craft_items
-    player->flags &= ~0x80;
   }
+  player->flags &= ~0x80;
 
   givePlayerItem(player, player->flagval_16, player->flagval_8);
   sc_setCursorItem(client_fd, 0, 0);
@@ -1139,14 +1180,19 @@ int sc_systemChat (int client_fd, char* message, uint16_t len) {
 // C->S Chat Message (processa comandos e chat)
 int cs_chat (int client_fd) {
 
-  // To be safe, cap messages to 32 bytes before the buffer length
-  readStringN(client_fd, 224);
+  readString(client_fd);
 
   PlayerData *player;
   if (getPlayerData(client_fd, &player)) return 1;
 
   size_t message_len = strlen((char *)recv_buffer);
   uint8_t name_len = strlen(player->name);
+
+  size_t max_message_len = MAX_RECV_BUF_LEN - name_len - 4;
+  if (message_len > max_message_len) {
+    message_len = max_message_len;
+    recv_buffer[message_len] = '\0';
+  }
 
   // === COMANDOS ===
   if (recv_buffer[0] == '/') {
@@ -1161,8 +1207,12 @@ int cs_chat (int client_fd) {
     // Comando /status
     if (strcmp((char *)recv_buffer, "/status") == 0) {
       char buf[128];
-snprintf(buf, sizeof(buf), "Players: %d, Free heap: %u KB",
-         client_count, (unsigned int)(esp_get_free_heap_size() / 1024));
+      #ifdef ESP_PLATFORM
+      snprintf(buf, sizeof(buf), "Players: %u, Free heap: %u KB",
+               (unsigned)client_count, (unsigned)(esp_get_free_heap_size() / 1024));
+      #else
+      snprintf(buf, sizeof(buf), "Players: %u", (unsigned)client_count);
+      #endif
       sc_systemChat(client_fd, buf, strlen(buf));
       goto cleanup;
     }
@@ -1183,7 +1233,7 @@ snprintf(buf, sizeof(buf), "Players: %d, Free heap: %u KB",
 
   // Forward message to all connected players
   for (int i = 0; i < MAX_PLAYERS; i ++) {
-    if (player_data[i].client_fd == -1) continue;
+    if (!isPlayClient(player_data[i].client_fd)) continue;
     if (player_data[i].flags & 0x20) continue;
     sc_systemChat(player_data[i].client_fd, (char *)recv_buffer, message_len + name_len + 3);
   }
@@ -1193,7 +1243,7 @@ cleanup:
   readUint64(client_fd); // timestamp
   readUint64(client_fd); // salt
   uint8_t has_signature = readByte(client_fd);
-  if (has_signature) recv_all(client_fd, recv_buffer, 256, false);
+  if (has_signature) recv_all(client_fd, recv_buffer, MAX_RECV_BUF_LEN, false);
   readVarInt(client_fd); // message count
   recv_all(client_fd, recv_buffer, 4, false); // acknowledgement
 
@@ -1314,12 +1364,10 @@ int cs_playerLoaded (int client_fd) {
 
 // S->C Registry Data (multiple packets) and Update Tags (configuration, multiple packets)
 int sc_registries (int client_fd) {
+  return send_all(client_fd, registries_bin, sizeof(registries_bin)) < 0 ? 1 : 0;
+}
 
-  printf("Sending Registries\n\n");
-  send_all(client_fd, registries_bin, sizeof(registries_bin));
-
-  printf("Sending Tags\n\n");
+int sc_updateTags (int client_fd) {
   send_all(client_fd, tags_bin, sizeof(tags_bin));
-
   return 0;
 }

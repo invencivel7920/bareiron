@@ -1,4 +1,4 @@
-# Install script for directory: /home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include
+# Install script for directory: /home/astronauta/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -34,63 +34,14 @@ endif()
 
 # Set path to fallback-tool for dependency-resolution.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
+  set(CMAKE_OBJDUMP "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/psa" TYPE FILE PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ FILES
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_adjust_auto_enabled.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_adjust_config_dependencies.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_adjust_config_derived.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_adjust_config_key_pair_types.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_adjust_config_synonyms.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_builtin_composites.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_builtin_key_derivation.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_builtin_primitives.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_compat.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_config.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_driver_common.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_driver_contexts_composites.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_driver_contexts_key_derivation.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_driver_contexts_primitives.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_driver_random.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_extra.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_platform.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_sizes.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_struct.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_types.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_values.h"
-    )
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include" TYPE DIRECTORY FILES "/home/astronauta/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/." FILES_MATCHING REGEX "/[^/]*\\.h$" REGEX "/crypto\\_config\\.h$" EXCLUDE)
 endif()
 
 if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/tf-psa-crypto" TYPE FILE PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ FILES
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/tf-psa-crypto/build_info.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/tf-psa-crypto/version.h"
-    )
-endif()
-
-if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
-  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/mbedtls" TYPE FILE PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ FILES
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/../drivers/builtin/include/mbedtls/config_adjust_legacy_crypto.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/../drivers/builtin/include/mbedtls/private_access.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/asn1.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/asn1write.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/base64.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/compat-3-crypto.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/constant_time.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/lms.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/md.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/memory_buffer_alloc.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/nist_kw.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/pem.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/pk.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/platform.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/platform_time.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/platform_util.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/psa_util.h"
-    "/home/aquiles_batista/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/mbedtls/threading.h"
-    )
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include/psa" TYPE FILE FILES "/home/astronauta/.platformio/packages/framework-espidf/components/mbedtls/mbedtls/tf-psa-crypto/include/psa/crypto_config.h")
 endif()
 

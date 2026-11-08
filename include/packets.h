@@ -27,7 +27,9 @@ int cs_playerLoaded (int client_fd);
 // Clientbound packets
 int sc_statusResponse (int client_fd);
 int sc_loginSuccess (int client_fd, uint8_t *uuid, char *name);
+int cs_knownPacks (int client_fd);
 int sc_knownPacks (int client_fd);
+int sc_featureFlags (int client_fd);
 int sc_sendPluginMessage (int client_fd, const char *channel, const uint8_t *data, size_t data_len);
 int sc_finishConfiguration (int client_fd);
 int sc_loginPlay (int client_fd);
@@ -61,5 +63,6 @@ int sc_entityEvent (int client_fd, int entity_id, uint8_t status);
 int sc_removeEntity (int client_fd, int entity_id);
 int sc_pickupItem (int client_fd, int collected, int collector, uint8_t count);
 int sc_registries (int client_fd);
+int sc_updateTags (int client_fd);
 
 #endif

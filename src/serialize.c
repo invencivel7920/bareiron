@@ -2,14 +2,17 @@
 
 #ifdef SYNC_WORLD_TO_DISK
 
-// Inclusão do cabeçalho do LittleFS apenas para ESP
+#include <stdio.h>
+
+// LittleFS is only available on ESP; on PC use a plain file in the CWD.
+// (The previous unclosed `#ifdef ESP_PLATFORM` here made the whole file
+// vanish on non-ESP builds, breaking the PC target entirely.)
 #ifdef ESP_PLATFORM
-//#include "esp_littlefs.h"   // Use este cabeçalho (a biblioteca exporta esp_vfs_littlefs_*)
-//    #define FILE_PATH "/littlefs/world.bin"
-//#else
-//    #include <stdio.h>
- //   #define FILE_PATH "world.bin"
-//#endif
+  #include "esp_spiffs.h"
+  #define FILE_PATH "/littlefs/world.bin"
+#else
+  #define FILE_PATH "world.bin"
+#endif
 
 #include "tools.h"
 #include "registries.h"
@@ -23,19 +26,17 @@ int initSerializer() {
     last_disk_sync_time = get_program_time();
 
 #ifdef ESP_PLATFORM
-    esp_vfs_littlefs_conf_t conf = {
+    esp_vfs_spiffs_conf_t conf = {
         .base_path = "/littlefs",
-        .partition_label = "littlefs",   // Nome da partição no partitions.csv
-        .format_if_mount_failed = true,
-        .dont_mount = false,
-        // .read_only = false,
-        // .grow_on_mount = false,
+        .partition_label = "storage",
+        .max_files = 5,
+        .format_if_mount_failed = true
     };
 
-    esp_err_t ret = esp_vfs_littlefs_register(&conf);
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
     if (ret != ESP_OK) {
-        printf("LittleFS register error: %s\n", esp_err_to_name(ret));
-        perror("Failed to mount LittleFS. Aborting.");
+        printf("SPIFFS register error: %s\n", esp_err_to_name(ret));
+        perror("Failed to mount SPIFFS. Aborting.");
         return 1;
     }
 #endif
@@ -46,7 +47,7 @@ int initSerializer() {
         // Lê as mudanças de bloco
         size_t read = fread(block_changes, 1, sizeof(block_changes), file);
         if (read != sizeof(block_changes)) {
-            printf("Read %u bytes from \"world.bin\", expected %u (block changes). Aborting.\n",
+            printf("Read %zu bytes from \"world.bin\", expected %zu (block changes). Aborting.\n",
                    read, sizeof(block_changes));
             fclose(file);
             return 1;
@@ -69,7 +70,7 @@ int initSerializer() {
         read = fread(player_data, 1, sizeof(player_data), file);
         fclose(file);
         if (read != sizeof(player_data)) {
-            printf("Read %u bytes from \"world.bin\", expected %u (player data). Aborting.\n",
+            printf("Read %zu bytes from \"world.bin\", expected %zu (player data). Aborting.\n",
                    read, sizeof(player_data));
             return 1;
         }

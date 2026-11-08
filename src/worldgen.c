@@ -17,7 +17,11 @@ uint32_t getChunkHash (short x, short z) {
   memcpy(buf + 2, &z, 2);
   memcpy(buf + 4, &world_seed, 4);
 
-  return splitmix64(*((uint64_t *)buf));
+  // Copy through a properly aligned uint64_t instead of type-punning the
+  // byte buffer (avoids strict-aliasing and unaligned-access UB).
+  uint64_t key;
+  memcpy(&key, buf, sizeof(key));
+  return (uint32_t)splitmix64(key);
 
 }
 
@@ -138,13 +142,6 @@ uint8_t getHeightAtFromAnchors (int rx, int rz, ChunkAnchor *anchor_ptr) {
   );
 
 }
-#define CHUNK_CACHE_SIZE 32
-typedef struct {
-    int x, z;
-    uint8_t data[16 * 256 * 16]; // tamanho de um chunk
-    bool valid;
-} chunk_cache_t;
-static chunk_cache_t chunk_cache[CHUNK_CACHE_SIZE];
 uint8_t getHeightAtFromHash (int rx, int rz, int _x, int _z, uint32_t chunk_hash, uint8_t biome) {
 
   if (rx == 0 && rz == 0) {
@@ -177,6 +174,8 @@ uint8_t getHeightAt (int x, int z) {
 }
 
 uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor anchor, ChunkFeature feature, uint8_t height) {
+
+  if (y > 80) return B_air;
 
   if (y >= 64 && y >= height && feature.y != 255) switch (anchor.biome) {
     case W_plains: { // Generate trees in the plains biome

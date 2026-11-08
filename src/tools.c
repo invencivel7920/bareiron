@@ -25,6 +25,7 @@
 #include "varnum.h"
 #include "procedures.h"
 #include "tools.h"
+#include "websocket.h"
 
 #ifndef htonll
   static uint64_t htonll (uint64_t value) {
@@ -41,7 +42,7 @@
 // Helps notice misread packets and clean up after errors
 uint64_t total_bytes_received = 0;
 
-ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
+static ssize_t recv_raw_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
   char *p = buf;
   size_t total = 0;
 
@@ -66,7 +67,7 @@ ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
     if (r < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         // handle network timeout
-        if (get_program_time() - last_update_time > NETWORK_TIMEOUT_TIME) {
+        if (get_program_time() - last_update_time > RECV_STALL_TIMEOUT_TIME) {
           disconnectClient(&client_fd, -1);
           return -1;
         }
@@ -77,9 +78,8 @@ ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
         return -1; // real error
       }
     } else if (r == 0) {
-      // connection closed before full read
       total_bytes_received += total;
-      return total;
+      return -1;
     }
     total += r;
     last_update_time = get_program_time();
@@ -89,7 +89,7 @@ ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
   return total; // got exactly n bytes
 }
 
-ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
+static ssize_t send_raw_all (int client_fd, const void *buf, ssize_t len) {
   // Treat any input buffer as *uint8_t for simplicity
   const uint8_t *p = (const uint8_t *)buf;
   ssize_t sent = 0;
@@ -122,7 +122,7 @@ ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
     if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
     #endif
       // handle network timeout
-      if (get_program_time() - last_update_time > NETWORK_TIMEOUT_TIME) {
+      if (get_program_time() - last_update_time > SEND_STALL_TIMEOUT_TIME) {
         disconnectClient(&client_fd, -2);
         return -1;
       }
@@ -135,12 +135,44 @@ ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
   return sent;
 }
 
+ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
+  if (ws_is_open(client_fd)) return ws_recv(client_fd, buf, n, require_first);
+  return recv_raw_all(client_fd, buf, n, require_first);
+}
+
+ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
+  if (len <= 0) return 0;
+  if (!ws_is_open(client_fd)) return send_raw_all(client_fd, buf, len);
+  uint8_t header[10];
+  int header_len = ws_frame_header(header, (uint64_t) len);
+  if (send_raw_all(client_fd, header, header_len) < 0) return -1;
+  return send_raw_all(client_fd, buf, len);
+}
+
+int conn_poll_readable (int client_fd) {
+  if (ws_mode(client_fd) == WS_MODE_OPEN) return ws_poll(client_fd);
+
+  uint8_t byte;
+  ssize_t r = recv(client_fd, &byte, 1, MSG_PEEK);
+  if (r > 0) return 1;
+  #ifdef _WIN32
+    if (r == 0) return -1;
+    int err = WSAGetLastError();
+    if (err == WSAEWOULDBLOCK || err == WSAEINTR) return 0;
+    return -1;
+  #else
+    if (r == 0) return -1;
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) return 0;
+    return -1;
+  #endif
+}
+
 void discard_all (int client_fd, size_t remaining, uint8_t require_first) {
   while (remaining > 0) {
     size_t recv_n = remaining > MAX_RECV_BUF_LEN ? MAX_RECV_BUF_LEN : remaining;
     ssize_t received = recv_all(client_fd, recv_buffer, recv_n, require_first);
     if (received < 0) return;
-    if (received > remaining) return;
+    if (received > (ssize_t)remaining) return;
     remaining -= received;
     require_first = false;
   }
@@ -231,11 +263,26 @@ double readDouble (int client_fd) {
 // Receive length prefixed data with bounds checking
 ssize_t readLengthPrefixedData (int client_fd) {
   uint32_t length = readVarInt(client_fd);
+  if (length == (uint32_t)VARNUM_ERROR) {
+    recv_count = -1;
+    return -1;
+  }
   if (length >= MAX_RECV_BUF_LEN) {
-    printf("ERROR: Received length (%lu) exceeds maximum (%u)\n", length, MAX_RECV_BUF_LEN);
-    disconnectClient(&client_fd, -1);
-    recv_count = 0;
-    return 0;
+    if (length > MAX_RECV_BUF_LEN * 8) {
+      printf("ERROR: Received length (%u) exceeds maximum (%u)\n",
+             (unsigned)length, (unsigned)MAX_RECV_BUF_LEN);
+      disconnectClient(&client_fd, -1);
+      recv_count = 0;
+      return 0;
+    }
+    recv_count = recv_all(client_fd, recv_buffer, MAX_RECV_BUF_LEN - 1, false);
+    if (recv_count < 0) return recv_count;
+    recv_buffer[recv_count] = '\0';
+    uint8_t dummy;
+    for (uint32_t i = MAX_RECV_BUF_LEN - 1; i < length; i ++) {
+      recv_all(client_fd, &dummy, 1, false);
+    }
+    return recv_count;
   }
   return recv_all(client_fd, recv_buffer, length, false);
 }
@@ -243,6 +290,7 @@ ssize_t readLengthPrefixedData (int client_fd) {
 // Reads a networked string into recv_buffer
 void readString (int client_fd) {
   recv_count = readLengthPrefixedData(client_fd);
+  if (recv_count < 0) return;
   recv_buffer[recv_count] = '\0';
 }
 // Reads a networked string of up to N bytes into recv_buffer
@@ -254,13 +302,19 @@ void readStringN (int client_fd, uint32_t max_length) {
   }
   // Attempt to read full string within maximum
   uint32_t length = readVarInt(client_fd);
+  if (length == (uint32_t)VARNUM_ERROR) {
+    recv_count = -1;
+    return;
+  }
   if (max_length > length) {
     recv_count = recv_all(client_fd, recv_buffer, length, false);
+    if (recv_count < 0) return;
     recv_buffer[recv_count] = '\0';
     return;
   }
   // Read string up to maximum, dump the rest
   recv_count = recv_all(client_fd, recv_buffer, max_length, false);
+  if (recv_count < 0) return;
   recv_buffer[recv_count] = '\0';
   uint8_t dummy;
   for (uint32_t i = max_length; i < length; i ++) {

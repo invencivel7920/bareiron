@@ -1,4 +1,4 @@
-# Install script for directory: /home/aquiles_batista/.platformio/packages/framework-espidf/components/esp_hal_gpspi
+# Install script for directory: /home/astronauta/.platformio/packages/framework-espidf/components/esp_hal_gpspi
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -34,6 +34,6 @@ endif()
 
 # Set path to fallback-tool for dependency-resolution.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
+  set(CMAKE_OBJDUMP "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
 endif()
 

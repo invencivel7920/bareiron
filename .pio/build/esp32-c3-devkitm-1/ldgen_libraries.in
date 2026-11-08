@@ -20,6 +20,7 @@ $<TARGET_FILE:__idf_esp_driver_gpio>
 $<TARGET_FILE:__idf_esp_hal_gpio>
 $<TARGET_FILE:__idf_esp_timer>
 $<TARGET_FILE:__idf_esp_hal_timg>
+$<TARGET_FILE:__idf_esp_hal_systimer>
 $<TARGET_FILE:__idf_esp_driver_dma>
 $<TARGET_FILE:__idf_esp_hal_dma>
 $<TARGET_FILE:__idf_esp_mm>
@@ -40,15 +41,12 @@ $<TARGET_FILE:__idf_lwip>
 $<TARGET_FILE:mbedtls>
 $<TARGET_FILE:mbedx509>
 $<TARGET_FILE:tfpsacrypto>
-$<TARGET_FILE:builtin>
-$<TARGET_FILE:idf::esp_security>
-$<TARGET_FILE:idf::esp_mm>
-$<TARGET_FILE:everest>
-$<TARGET_FILE:p256m>
 $<TARGET_FILE:__idf_nvs_flash>
 $<TARGET_FILE:__idf_nvs_sec_provider>
 $<TARGET_FILE:idf::mbedtls>
+$<TARGET_FILE:idf::esp_security>
 $<TARGET_FILE:idf::esp_driver_dma>
+$<TARGET_FILE:idf::esp_mm>
 $<TARGET_FILE:idf::efuse>
 $<TARGET_FILE:__idf_esp_hal_wdt>
 $<TARGET_FILE:__idf_esp_hal_ana_conv>
@@ -71,6 +69,8 @@ $<TARGET_FILE:__idf_http_parser>
 $<TARGET_FILE:__idf_esp_http_server>
 $<TARGET_FILE:__idf_esp_wifi>
 $<TARGET_FILE:__idf_esp_phy>
+$<TARGET_FILE:esp_phy_libbtbb>
+$<TARGET_FILE:esp_phy_libphy>
 $<TARGET_FILE:__idf_esp_netif>
 $<TARGET_FILE:__idf_wpa_supplicant>
 $<TARGET_FILE:__idf_esp_coex>
@@ -94,6 +94,7 @@ $<TARGET_FILE:idf::esp_bootloader_format>
 $<TARGET_FILE:idf::app_update>
 $<TARGET_FILE:idf::esp_partition>
 $<TARGET_FILE:idf::esp_hal_timg>
+$<TARGET_FILE:idf::esp_hal_systimer>
 $<TARGET_FILE:idf::esp_timer>
 $<TARGET_FILE:idf::esp_driver_gpio>
 $<TARGET_FILE:idf::esp_hal_uart>
@@ -112,7 +113,6 @@ $<TARGET_FILE:idf::soc>
 $<TARGET_FILE:idf::esp_hal_gpio>
 $<TARGET_FILE:idf::esp_hal_usb>
 $<TARGET_FILE:idf::esp_hal_pmu>
-$<TARGET_FILE:idf::esp_hal_i2s>
 $<TARGET_FILE:idf::esp_hw_support>
 $<TARGET_FILE:idf::freertos>
 $<TARGET_FILE:idf::esp_libc>
@@ -135,6 +135,7 @@ $<TARGET_FILE:idf::esp_coex>
 $<TARGET_FILE:idf::esp_wifi>
 $<TARGET_FILE:idf::esp_driver_spi>
 $<TARGET_FILE:idf::esp_gdbstub>
+$<TARGET_FILE:__idf_esp_driver_spi>
 $<TARGET_FILE:idf::unity>
 $<TARGET_FILE:idf::cmock>
 $<TARGET_FILE:__idf_unity>
@@ -149,6 +150,7 @@ $<TARGET_FILE:idf::esp_adc>
 $<TARGET_FILE:idf::esp_blockdev_util>
 $<TARGET_FILE:idf::esp_driver_cam>
 $<TARGET_FILE:idf::esp_driver_i2c>
+$<TARGET_FILE:idf::esp_hal_i2s>
 $<TARGET_FILE:idf::esp_driver_i2s>
 $<TARGET_FILE:idf::esp_hal_ledc>
 $<TARGET_FILE:idf::esp_driver_ledc>
@@ -162,7 +164,6 @@ $<TARGET_FILE:__idf_sdmmc>
 $<TARGET_FILE:idf::esp_driver_sdm>
 $<TARGET_FILE:__idf_esp_driver_sd_intf>
 $<TARGET_FILE:idf::esp_driver_sdspi>
-$<TARGET_FILE:__idf_esp_driver_spi>
 $<TARGET_FILE:idf::esp_driver_tsens>
 $<TARGET_FILE:idf::esp_driver_twai>
 $<TARGET_FILE:idf::esp_eth>

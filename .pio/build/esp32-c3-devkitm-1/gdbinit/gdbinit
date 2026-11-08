@@ -1,2 +1,2 @@
-source /home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/gdbinit/symbols
-source /home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/gdbinit/connect
+source /home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/gdbinit/symbols
+source /home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/gdbinit/connect

@@ -6,22 +6,22 @@ cmake_minimum_required(VERSION 3.5)
 # If CMAKE_DISABLE_SOURCE_CHANGES is set to true and the source directory is an
 # existing directory in our source tree, calling file(MAKE_DIRECTORY) on it
 # would cause a fatal error, even though it would be a no-op.
-if(NOT EXISTS "/home/aquiles_batista/.platformio/packages/framework-espidf/components/bootloader/subproject")
-  file(MAKE_DIRECTORY "/home/aquiles_batista/.platformio/packages/framework-espidf/components/bootloader/subproject")
+if(NOT EXISTS "/home/astronauta/.platformio/packages/framework-espidf/components/bootloader/subproject")
+  file(MAKE_DIRECTORY "/home/astronauta/.platformio/packages/framework-espidf/components/bootloader/subproject")
 endif()
 file(MAKE_DIRECTORY
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader"
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix"
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/tmp"
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp"
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src"
-  "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/tmp"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src"
+  "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp"
 )
 
 set(configSubDirs )
 foreach(subDir IN LISTS configSubDirs)
-    file(MAKE_DIRECTORY "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp/${subDir}")
+    file(MAKE_DIRECTORY "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp/${subDir}")
 endforeach()
 if(cfgdir)
-  file(MAKE_DIRECTORY "/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
+  file(MAKE_DIRECTORY "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
 endif()

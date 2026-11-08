@@ -413,23 +413,23 @@ async function convert () {
 #include "registries.h"
 
 // Binary contents of required "Registry Data" packets
-uint8_t registries_bin[] = {
+const uint8_t registries_bin[] = {
 ${toCArray(fullRegistryBuffer)}
 };
 // Binary contents of "Update Tags" packets
-uint8_t tags_bin[] = {
+const uint8_t tags_bin[] = {
 ${toCArray(tagBuffer)}
 };
 
 // Block palette
-uint16_t block_palette[] = { ${Object.values(itemsAndBlocks.palette).join(", ")} };
+const uint16_t block_palette[] = { ${Object.values(itemsAndBlocks.palette).join(", ")} };
 // Block palette as VarInt buffer
-uint8_t network_block_palette[] = {
+const uint8_t network_block_palette[] = {
 ${toCArray(networkBlockPalette)}
 };
 
 // Block-to-item mapping
-uint16_t B_to_I[] = { ${itemsAndBlocks.mappingWithOverrides.join(", ")} };
+const uint16_t B_to_I[] = { ${itemsAndBlocks.mappingWithOverrides.join(", ")} };
 // Item-to-block mapping
 uint8_t I_to_B (uint16_t item) {
   switch (item) {
@@ -447,12 +447,12 @@ uint8_t I_to_B (uint16_t item) {
 #include <stdint.h>
 
 // Binary packet data (${fullRegistryBuffer.length + tagBuffer.length} bytes total)
-extern uint8_t registries_bin[${fullRegistryBuffer.length}];
-extern uint8_t tags_bin[${tagBuffer.length}];
+extern const uint8_t registries_bin[${fullRegistryBuffer.length}];
+extern const uint8_t tags_bin[${tagBuffer.length}];
 
-extern uint16_t block_palette[256]; // Block palette
-extern uint8_t network_block_palette[${networkBlockPalette.length}]; // Block palette as VarInt buffer
-extern uint16_t B_to_I[256]; // Block-to-item mapping
+extern const uint16_t block_palette[256]; // Block palette
+extern const uint8_t network_block_palette[${networkBlockPalette.length}]; // Block palette as VarInt buffer
+extern const uint16_t B_to_I[256]; // Block-to-item mapping
 uint8_t I_to_B (uint16_t item); // Item-to-block mapping
 
 // Block identifiers

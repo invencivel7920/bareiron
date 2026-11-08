@@ -5,3 +5,14 @@ bareiron.exe
 src/registries.c
 include/registries.h
 *.bin
+
+# Build artifacts
+.pio/
+build/
+dist/
+*.o
+*.elf
+*.map
+
+# Tooling caches
+.lean_ai/

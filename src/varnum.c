@@ -28,6 +28,8 @@ int32_t readVarInt (int client_fd) {
     if (position >= 32) return VARNUM_ERROR;
   }
 
+  if ((uint32_t)value > 4096) return VARNUM_ERROR;
+
   return value;
 }
 

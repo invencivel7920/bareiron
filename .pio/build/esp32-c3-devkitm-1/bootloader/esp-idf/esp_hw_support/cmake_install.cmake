@@ -1,4 +1,4 @@
-# Install script for directory: /home/aquiles_batista/.platformio/packages/framework-espidf/components/esp_hw_support
+# Install script for directory: /home/astronauta/.platformio/packages/framework-espidf/components/esp_hw_support
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -34,16 +34,21 @@ endif()
 
 # Set path to fallback-tool for dependency-resolution.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/home/aquiles_batista/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
+  set(CMAKE_OBJDUMP "/home/astronauta/.platformio/packages/toolchain-riscv32-esp/bin/riscv32-esp-elf-objdump")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/esp-idf/esp_hw_support/port/esp32c3/cmake_install.cmake")
+  include("/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/esp-idf/esp_hw_support/port/esp32c3/cmake_install.cmake")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/aquiles_batista/Projetos/VsCode/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/esp-idf/esp_hw_support/lowpower/cmake_install.cmake")
+  include("/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/esp-idf/esp_hw_support/lowpower/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/bootloader/esp-idf/esp_hw_support/modem/cmake_install.cmake")
 endif()
 
