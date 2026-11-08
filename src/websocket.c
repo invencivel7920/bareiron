@@ -383,6 +383,25 @@ int ws_handshake_step (int client_fd) {
   if (n < 0 || n >= (int) sizeof(resp)) return -1;
   if (ws_raw_write(c, resp, (size_t) n) < 0) return -1;
 
+  // Preserve any extra bytes that arrived after the HTTP header (e.g., Minecraft handshake)
+  int header_end = -1;
+  for (int i = 0; i + 3 < c->http_len; i++) {
+    if (c->http_buf[i] == '\r' && c->http_buf[i + 1] == '\n' &&
+        c->http_buf[i + 2] == '\r' && c->http_buf[i + 3] == '\n') {
+      header_end = i + 4;
+      break;
+    }
+  }
+
+  c->in_len = 0;
+  c->in_pos = 0;
+  if (header_end != -1 && c->http_len > header_end) {
+    int extra_len = c->http_len - header_end;
+    if (extra_len > WS_IN_BUF) extra_len = WS_IN_BUF;
+    memcpy(c->in_buf, c->http_buf + header_end, extra_len);
+    c->in_len = extra_len;
+  }
+
   c->http_len = 0;
   c->mode = WS_MODE_OPEN;
   printf("WebSocket handshake complete (fd %d, protocol: %s)\n",

@@ -642,7 +642,7 @@ int main () {
           disconnectClient(&clients[i], 8);
           continue;
         }
-        continue;
+        mode = ws_mode(client_fd);
       }
 
       int readable = conn_poll_readable(client_fd);
