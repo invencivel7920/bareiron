@@ -522,6 +522,7 @@ int ws_poll (int client_fd) {
   if (c->in_pos < c->in_len) return 1;
   int r = ws_fill(c, 0);
   if (r < 0) return -1;
+  printf("WS_POLL: fd=%d r=%d in_pos=%d in_len=%d\n", client_fd, r, c->in_pos, c->in_len);
   return r ? 1 : 0;
 }
 
