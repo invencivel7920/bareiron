@@ -664,6 +664,7 @@ int main () {
       if ((uint32_t)packet_id == VARNUM_ERROR) {
         continue;
       }
+      printf("DEBUG: length=%d packet_id=%d state=%d\n", length, packet_id, state);
 
       length -= sizeVarInt(packet_id);
 
