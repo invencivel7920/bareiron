@@ -657,7 +657,6 @@ int main () {
         continue;
       }
       if (readable == 0) continue;
-      printf("DEBUG: fd=%d readable=%d mode=%d\n", client_fd, readable, ws_mode(client_fd));
       recv_count = 1;
 
       int length = readVarInt(client_fd);
@@ -674,8 +673,6 @@ int main () {
       if ((uint32_t)packet_id == VARNUM_ERROR) {
         continue;
       }
-      printf("DEBUG: length=%d packet_id=%d state=%d\n", length, packet_id, state);
-
       length -= sizeVarInt(packet_id);
 
       if (length < 0 || length > 2097152) {
