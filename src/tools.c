@@ -197,8 +197,10 @@ ssize_t writeDouble (int client_fd, double num) {
 }
 
 uint8_t readByte (int client_fd) {
-  recv_count = recv_all(client_fd, recv_buffer, 1, false);
-  return recv_buffer[0];
+  uint8_t byte;
+  recv_count = recv_all(client_fd, &byte, 1, false);
+  if (recv_count != 1) return 0;
+  return byte;
 }
 uint16_t readUint16 (int client_fd) {
   recv_count = recv_all(client_fd, recv_buffer, 2, false);

@@ -681,6 +681,9 @@ int main () {
 
       handlePacket(client_fd, length, packet_id, state);
       if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+        if (state == STATE_STATUS) {
+          continue;
+        }
         disconnectClient(&clients[i], 4);
         continue;
       }
