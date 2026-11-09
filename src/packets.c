@@ -104,40 +104,26 @@ int sc_loginSuccess (int client_fd, uint8_t *uuid, char *name) {
 }
 
 int cs_clientInformation (int client_fd) {
-  int tmp;
   printf("Received Client Information:\n");
   readString(client_fd);
   if (recv_count == -1) return 0;
   printf("  Locale: %s\n", recv_buffer);
-  if (recv_count <= 0) return 0;
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  printf("  View distance: %d\n", tmp);
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  printf("  Chat mode: %d\n", tmp);
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  if (tmp) printf("  Chat colors: on\n");
-  else printf("  Chat colors: off\n");
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  printf("  Skin parts: %d\n", tmp);
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  if (tmp) printf("  Main hand: right\n");
-  else printf("  Main hand: left\n");
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  if (tmp) printf("  Text filtering: on\n");
-  else printf("  Text filtering: off\n");
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  if (tmp) printf("  Allow listing: on\n");
-  else printf("  Allow listing: off\n");
-  tmp = readVarInt(client_fd);
-  if (recv_count == VARNUM_ERROR || recv_count < 0) return 0;
-  printf("  Particles: %d\n\n", tmp);
+  uint8_t view_distance = readByte(client_fd);
+  printf("  View distance: %d\n", view_distance);
+  int chat_mode = readVarInt(client_fd);
+  printf("  Chat mode: %d\n", chat_mode);
+  uint8_t chat_colors = readByte(client_fd);
+  printf("  Chat colors: %s\n", chat_colors ? "on" : "off");
+  uint8_t skin_parts = readByte(client_fd);
+  printf("  Skin parts: %d\n", skin_parts);
+  int main_hand = readVarInt(client_fd);
+  printf("  Main hand: %s\n", main_hand ? "right" : "left");
+  uint8_t text_filtering = readByte(client_fd);
+  printf("  Text filtering: %s\n", text_filtering ? "on" : "off");
+  uint8_t server_listings = readByte(client_fd);
+  printf("  Allow listing: %s\n", server_listings ? "on" : "off");
+  int particle_status = readVarInt(client_fd);
+  printf("  Particles: %d\n\n", particle_status);
   return 0;
 }
 

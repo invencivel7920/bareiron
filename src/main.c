@@ -80,11 +80,6 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
   // Contagem de bytes recebidos para detectar discrepâncias
   uint64_t bytes_received_start = total_bytes_received;
 
-  if (packet_id < 0) {
-    packet_id = readVarInt(client_fd);
-    if ((uint32_t)packet_id == VARNUM_ERROR) return;
-  }
-
   switch (packet_id) {
 
     case 0x00:
@@ -661,38 +656,14 @@ int main () {
         // No data available yet; try again later
         continue;
       }
-      if ((uint32_t)length > MAX_RECV_BUF_LEN * 8) {
-        printf("ERROR: Invalid packet length %u, disconnecting\n", (unsigned)length);
-        disconnectClient(&clients[i], 2);
-        continue;
-      }
+      int packet_id = readVarInt(client_fd);
+      if ((uint32_t)packet_id == VARNUM_ERROR) continue;
       int state = getClientState(client_fd);
       if (state == STATE_LOGIN && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
         state = STATE_CONFIGURATION;
       }
-      int packet_id = readVarInt(client_fd);
-      if ((uint32_t)packet_id == VARNUM_ERROR) {
-        // No data available yet; try again later
-        continue;
-      }
-      if ((uint32_t)packet_id > 0xFF) {
-        printf("ERROR: Invalid packet id %u, disconnecting\n", (unsigned)packet_id);
-        disconnectClient(&clients[i], 3);
-        continue;
-      }
-      if (state == STATE_NONE && packet_id >= 0 && length == 254 && packet_id == 122) {
-        disconnectClient(&clients[i], 5);
-        continue;
-      }
-      printf("DEBUG: length=%d packet_id=%d state=%d\n", length, packet_id, state);
-      if (packet_id >= 0 && (length < sizeVarInt(packet_id) || length > 2097152)) {
-        disconnectClient(&clients[i], 2);
-        continue;
-      }
-      if (packet_id >= 0) {
-        length -= sizeVarInt(packet_id);
-      }
-      handlePacket(client_fd, length, packet_id, state);
+      int payload_length = length - sizeVarInt(packet_id);
+      handlePacket(client_fd, payload_length, packet_id, state);
       if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         disconnectClient(&clients[i], 4);
         continue;
