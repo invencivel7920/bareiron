@@ -51,8 +51,7 @@
 // Limite de alterações de bloco reduzido para 1000
 #define MAX_BLOCK_CHANGES 1000
 
-// Persistência em disco FORÇADA (mesmo no ESP32)
-#define SYNC_WORLD_TO_DISK
+
 
 // Intervalo de sincronização (15s)
 #define DISK_SYNC_INTERVAL 15000000
