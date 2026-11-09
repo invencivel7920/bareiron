@@ -406,6 +406,7 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   int empty_sections = 20 - terrain_sections;
   for (int i = 0; i < empty_sections; i ++) memcpy(bulk + i * 6, empty_air, 6);
   if (empty_sections) send_all(client_fd, bulk, empty_sections * 6);
+  task_yield();
 
   writeVarInt(client_fd, 0); // omit block entities
 
