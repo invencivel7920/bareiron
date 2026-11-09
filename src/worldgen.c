@@ -402,7 +402,7 @@ ChunkFeature chunk_features[256 / (CHUNK_SIZE * CHUNK_SIZE)];
 uint8_t chunk_section_height[16][16];
 
 // Must be called once per chunk before buildChunkSection.
-void precomputeChunkData (int cx, int cz) {
+uint8_t precomputeChunkData (int cx, int cz) {
 
   int anchor_index = 0, feature_index = 0;
   for (int i = cz; i < cz + 16 + CHUNK_SIZE; i += CHUNK_SIZE) {
@@ -425,13 +425,17 @@ void precomputeChunkData (int cx, int cz) {
     }
   }
 
+  uint8_t max_height = 0;
   for (int i = 0; i < 16; i ++) {
     for (int j = 0; j < 16; j ++) {
       anchor_index = (j / CHUNK_SIZE) + (i / CHUNK_SIZE) * (16 / CHUNK_SIZE + 1);
       ChunkAnchor *anchor_ptr = chunk_anchors + anchor_index;
-      chunk_section_height[j][i] = getHeightAtFromAnchors(j % CHUNK_SIZE, i % CHUNK_SIZE, anchor_ptr);
+      uint8_t height = getHeightAtFromAnchors(j % CHUNK_SIZE, i % CHUNK_SIZE, anchor_ptr);
+      chunk_section_height[j][i] = height;
+      if (height > max_height) max_height = height;
     }
   }
+  return max_height;
 }
 
 // Builds a 16x16x16 chunk of blocks and writes it to `chunk_section`

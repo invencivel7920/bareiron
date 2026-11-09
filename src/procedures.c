@@ -13,7 +13,6 @@
 #include "registries.h"
 #include "worldgen.h"
 #include "structures.h"
-#include "serialize.h"
 #include "procedures.h"
 #include "websocket.h"
 
@@ -80,6 +79,7 @@ void resetPlayerData (PlayerData *player) {
   player->y = 80;
   player->flags |= 0x02;
   player->grounded_y = 0;
+  player->chunk_queue_count = 0;
   for (int i = 0; i < 41; i ++) {
     player->inventory_items[i] = 0;
     player->inventory_count[i] = 0;
@@ -108,6 +108,7 @@ int reservePlayerData (int client_fd, uint8_t *uuid, char *name) {
         player_data[i].visited_x[j] = 32767;
         player_data[i].visited_z[j] = 32767;
       }
+      player_data[i].chunk_queue_count = 0;
       return 0;
     }
     // Search for unallocated player slots
@@ -593,7 +594,6 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
           block_changes[i].block = 0xFF;
           if (first_gap > i) first_gap = i;
           #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
-          writeBlockChangesToDisk(i, i);
           #endif
           break;
         }
@@ -601,7 +601,6 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
         block_changes[i].block = block;
       }
       #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
-      writeBlockChangesToDisk(i, i);
       #endif
       return 0;
     }
@@ -644,7 +643,6 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
       }
       // Write changes to disk (if applicable)
       #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
-      writeBlockChangesToDisk(last_real_entry + 1, last_real_entry + 15);
       #endif
       return 0;
     }
@@ -668,7 +666,6 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
   if (y > highest_block_change_y) highest_block_change_y = y;
   // Write change to disk (if applicable)
   #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
-  writeBlockChangesToDisk(first_gap, first_gap);
   #endif
   // Extend future search range if we've appended to the end
   if (first_gap == block_changes_count) {
@@ -1775,7 +1772,6 @@ void handleServerTick (int64_t time_since_last_tick) {
   }
 
   // Perform regular checks for if it's time to write to disk
-  writeDataToDiskOnInterval();
 
   /**
    * If the RNG seed ever hits 0, it'll never generate anything
@@ -2024,7 +2020,6 @@ void broadcastChestUpdate (int origin_fd, uint8_t *storage_ptr, uint16_t item, u
   }
 
   #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
-  writeChestChangesToDisk(storage_ptr, slot);
   #endif
 
 }

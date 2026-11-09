@@ -23,7 +23,6 @@
 #include "crafting.h"
 #include "procedures.h"
 #include "packets.h"
-#include "serialize.h"      // para writeDataToDiskOnInterval
 #include "procedures.h"     // para handlePlayerAction, etc.
 
 // Variáveis externas
@@ -351,11 +350,13 @@ int sc_setCenterChunk (int client_fd, int x, int y) {
 // S->C Chunk Data and Update Light
 int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
-  int max_change_y = highest_block_change_y;
-
-  // O terreno acima de y=80 é sempre ar, então essas seções podem ir como
-  // seções uniformes de 6 bytes em vez do palette completo de 4,6 KB.
-  const int terrain_sections = (max_change_y >= 96) ? 20 : 6;
+  int x = _x * 16, z = _z * 16, y;
+  uint8_t max_height = precomputeChunkData(x, z);
+  int terrain_sections = max_height / 16 + 1;
+  int change_sections = highest_block_change_y / 16 + 1;
+  if (change_sections > terrain_sections) terrain_sections = change_sections;
+  if (terrain_sections < 4) terrain_sections = 4;
+  if (terrain_sections > 20) terrain_sections = 20;
 
   const int chunk_data_size = (4101 + sizeVarInt(256) + sizeof(network_block_palette)) * terrain_sections
                             + 6 * (4 + 20 - terrain_sections);
@@ -371,8 +372,6 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   writeVarInt(client_fd, 0); // omit heightmaps
 
   writeVarInt(client_fd, chunk_data_size);
-
-  int x = _x * 16, z = _z * 16, y;
 
   static const uint8_t empty_bedrock[6] = { 0x10, 0x00, 0x00, 0x55, 0x00, 0x00 };
   static const uint8_t empty_air[6] = { 0x10, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -391,7 +390,6 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   send_all(client_fd, bulk, 24);
   task_yield();
 
-  precomputeChunkData(x, z);
   for (int i = 0; i < terrain_sections; i ++) {
     y = i * 16;
     send_all(client_fd, section_prefix, sizeof(section_prefix));
@@ -601,7 +599,6 @@ int cs_useItemOn (int client_fd) {
   broadcastBlockChange(x, y, z, new_block);
 
   // Salva no LittleFS (se habilitado)
-  writeDataToDiskOnInterval();
 
   return 0;
 }

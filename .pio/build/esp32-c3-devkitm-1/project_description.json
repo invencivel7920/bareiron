@@ -1,7 +1,7 @@
 {
     "version":            "1.3",
     "project_name":       "bareiron",
-    "project_version":    "latest-72-g343d2ea-dirty",
+    "project_version":    "latest-98-g9fea6ea-dirty",
     "project_path":       "/home/astronauta/projects/bareiron",
     "idf_path":           "/home/astronauta/.platformio/packages/framework-espidf",
     "build_dir":          "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1",
@@ -2095,7 +2095,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/home/astronauta/projects/bareiron/.pio/build/esp32-c3-devkitm-1/esp-idf/src/libsrc.a",
-            "sources": [ "/home/astronauta/projects/bareiron/src/CMakeLists.txt", "/home/astronauta/projects/bareiron/src/crafting.c", "/home/astronauta/projects/bareiron/src/globals.c", "/home/astronauta/projects/bareiron/src/main.c", "/home/astronauta/projects/bareiron/src/packets.c", "/home/astronauta/projects/bareiron/src/procedures.c", "/home/astronauta/projects/bareiron/src/registries.c", "/home/astronauta/projects/bareiron/src/serialize.c", "/home/astronauta/projects/bareiron/src/structures.c", "/home/astronauta/projects/bareiron/src/tools.c", "/home/astronauta/projects/bareiron/src/varnum.c", "/home/astronauta/projects/bareiron/src/websocket.c", "/home/astronauta/projects/bareiron/src/worldgen.c" ],
+            "sources": [ "/home/astronauta/projects/bareiron/src/CMakeLists.txt", "/home/astronauta/projects/bareiron/src/crafting.c", "/home/astronauta/projects/bareiron/src/globals.c", "/home/astronauta/projects/bareiron/src/main.c", "/home/astronauta/projects/bareiron/src/packets.c", "/home/astronauta/projects/bareiron/src/procedures.c", "/home/astronauta/projects/bareiron/src/registries.c", "/home/astronauta/projects/bareiron/src/structures.c", "/home/astronauta/projects/bareiron/src/tools.c", "/home/astronauta/projects/bareiron/src/varnum.c", "/home/astronauta/projects/bareiron/src/websocket.c", "/home/astronauta/projects/bareiron/src/worldgen.c" ],
             "include_dirs": [ "." ]
         },
         "tcp_transport": {

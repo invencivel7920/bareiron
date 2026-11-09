@@ -21,6 +21,7 @@
   #include "esp_timer.h"
   #include "lwip/sockets.h"
   #include "lwip/netdb.h"
+  #include "lwip/tcp.h"
 #else
   #include <sys/types.h>
   #ifdef _WIN32
@@ -34,6 +35,9 @@
   #endif
   #include <unistd.h>
   #include <time.h>
+  #ifndef _WIN32
+    #include <netinet/tcp.h>
+  #endif
 #endif
 
 #include "globals.h"
@@ -44,7 +48,6 @@
 #include "registries.h"
 #include "procedures.h"
 #include "websocket.h"
-#include "serialize.h"
 
 // ============================================================
 //  MACROS DE PERFORMANCE (renomeadas para evitar conflito)
@@ -143,9 +146,14 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         spawnPlayer(player);
 
         sc_setCenterChunk(client_fd, 0, 0);
+        sc_chunkDataAndUpdateLight(client_fd, 0, 0);
+        player->chunk_queue_count = 0;
         for (int cx = -VIEW_DISTANCE; cx <= VIEW_DISTANCE; cx++) {
           for (int cz = -VIEW_DISTANCE; cz <= VIEW_DISTANCE; cz++) {
-            sc_chunkDataAndUpdateLight(client_fd, cx, cz);
+            if (cx == 0 && cz == 0) continue;
+            player->chunk_queue_x[player->chunk_queue_count] = cx;
+            player->chunk_queue_z[player->chunk_queue_count] = cz;
+            player->chunk_queue_count ++;
           }
         }
         player->visited_x[VISITED_HISTORY - 1] = 0;
@@ -477,7 +485,6 @@ int main () {
     block_changes[i].block = 0xFF;
   }
 
-  if (initSerializer()) exit(EXIT_FAILURE);
 
   int clients[MAX_PLAYERS];
   for (int i = 0; i < MAX_PLAYERS; i ++) {
@@ -543,6 +550,17 @@ int main () {
     int64_t wait_us = last_tick_time + TIME_BETWEEN_TICKS - now;
     if (wait_us < 0) wait_us = 0;
 
+    bool chunk_pending = false;
+    for (int i = 0; i < MAX_PLAYERS; i ++) {
+      if (player_data[i].client_fd == -1 || player_data[i].chunk_queue_count == 0) continue;
+      if (getClientState(player_data[i].client_fd) != STATE_PLAY) continue;
+      int idx = -- player_data[i].chunk_queue_count;
+      sc_chunkDataAndUpdateLight(player_data[i].client_fd,
+        player_data[i].chunk_queue_x[idx], player_data[i].chunk_queue_z[idx]);
+      chunk_pending = true;
+    }
+    if (chunk_pending) wait_us = 0;
+
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(server_fd, &read_fds);
@@ -603,6 +621,8 @@ int main () {
           continue;
         }
         clients[slot] = new_fd;
+        int no_delay = 1;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &no_delay, sizeof(no_delay));
         #ifdef _WIN32
         u_long mode = 1;
         ioctlsocket(new_fd, FIONBIO, &mode);

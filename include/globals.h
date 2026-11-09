@@ -28,6 +28,7 @@
 #define GAMEMODE 0
 
 #define VIEW_DISTANCE 3
+#define CHUNK_QUEUE_SIZE ((2 * VIEW_DISTANCE + 1) * (2 * VIEW_DISTANCE + 1))
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
 #define TIME_BETWEEN_TICKS 500000
@@ -126,6 +127,9 @@ typedef struct {
   short z;
   short visited_x[VISITED_HISTORY];
   short visited_z[VISITED_HISTORY];
+  int8_t chunk_queue_x[CHUNK_QUEUE_SIZE];
+  int8_t chunk_queue_z[CHUNK_QUEUE_SIZE];
+  uint8_t chunk_queue_count;
   #ifdef SCALE_MOVEMENT_UPDATES_TO_PLAYER_COUNT
     uint16_t packets_since_update;
   #endif
