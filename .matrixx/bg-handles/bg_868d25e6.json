@@ -1,0 +1,12 @@
+{
+  "taskId": "bg_868d25e6",
+  "parentSessionID": "ses_e487a8d4fffenWLfITOcidJSF3",
+  "parentMessageID": "",
+  "description": "tracked native session ses_e426174b2ffev8vka21uxkhMo0",
+  "agent": "native",
+  "status": "error",
+  "sessionID": "ses_e426174b2ffev8vka21uxkhMo0",
+  "title": "[BG] Native — tracked native session ses_e426174b2ffev8vka21uxkhMo0",
+  "startedAt": 1794182647006,
+  "completedAt": 1794182647145
+}

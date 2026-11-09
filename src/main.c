@@ -92,7 +92,7 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         if (cs_handshake(client_fd)) break;
       } else if (state == STATE_STATUS) {
         if (sc_statusResponse(client_fd)) break;
-      } else if (state == STATE_LOGIN) {
+      } if (state == STATE_LOGIN) {
         if (cs_loginStart(client_fd, uuid, name)) break;
         if (reservePlayerData(client_fd, uuid, name)) {
           recv_count = 0;
@@ -680,11 +680,11 @@ int main () {
           continue;
         }
       }
-      if (state == STATE_NONE && length == 254 && packet_id == 122) {
+      if (state == STATE_NONE && packet_id >= 0 && length == 254 && packet_id == 122) {
         disconnectClient(&clients[i], 5);
         continue;
       }
-      if (length < sizeVarInt(packet_id) || length > 2097152) {
+      if (packet_id >= 0 && (length < sizeVarInt(packet_id) || length > 2097152)) {
         disconnectClient(&clients[i], 2);
         continue;
       }
