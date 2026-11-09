@@ -401,11 +401,9 @@ ChunkAnchor chunk_anchors[(16 / CHUNK_SIZE + 1) * (16 / CHUNK_SIZE + 1)];
 ChunkFeature chunk_features[256 / (CHUNK_SIZE * CHUNK_SIZE)];
 uint8_t chunk_section_height[16][16];
 
-// Builds a 16x16x16 chunk of blocks and writes it to `chunk_section`
-// Returns the biome at the origin corner of the chunk
-uint8_t buildChunkSection (int cx, int cy, int cz) {
+// Must be called once per chunk before buildChunkSection.
+void precomputeChunkData (int cx, int cz) {
 
-  // Precompute hashes, anchors and features for each relevant minichunk
   int anchor_index = 0, feature_index = 0;
   for (int i = cz; i < cz + 16 + CHUNK_SIZE; i += CHUNK_SIZE) {
     for (int j = cx; j < cx + 16 + CHUNK_SIZE; j += CHUNK_SIZE) {
@@ -427,7 +425,6 @@ uint8_t buildChunkSection (int cx, int cy, int cz) {
     }
   }
 
-  // Precompute terrain height for entire chunk section
   for (int i = 0; i < 16; i ++) {
     for (int j = 0; j < 16; j ++) {
       anchor_index = (j / CHUNK_SIZE) + (i / CHUNK_SIZE) * (16 / CHUNK_SIZE + 1);
@@ -435,8 +432,14 @@ uint8_t buildChunkSection (int cx, int cy, int cz) {
       chunk_section_height[j][i] = getHeightAtFromAnchors(j % CHUNK_SIZE, i % CHUNK_SIZE, anchor_ptr);
     }
   }
+}
+
+// Builds a 16x16x16 chunk of blocks and writes it to `chunk_section`
+// Returns the biome at the origin corner of the chunk
+uint8_t buildChunkSection (int cx, int cy, int cz) {
 
   // Generate 4096 blocks in one buffer to reduce overhead
+  int anchor_index, feature_index;
   for (int j = 0; j < 4096; j += 8) {
     // These values don't change in the lower array,
     // since all of the operations are on multiples of 8

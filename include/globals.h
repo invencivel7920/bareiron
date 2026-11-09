@@ -168,6 +168,7 @@ typedef struct {
 
 extern BlockChange block_changes[MAX_BLOCK_CHANGES];
 extern int block_changes_count;
+extern uint8_t highest_block_change_y;
 extern PlayerData player_data[MAX_PLAYERS];
 extern int player_data_count;
 extern MobData mob_data[MAX_MOBS];

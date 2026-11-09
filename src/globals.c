@@ -49,6 +49,7 @@ uint16_t client_count;
 
 BlockChange block_changes[MAX_BLOCK_CHANGES];
 int block_changes_count = 0;
+uint8_t highest_block_change_y = 0;
 
 PlayerData player_data[MAX_PLAYERS];
 int player_data_count = 0;

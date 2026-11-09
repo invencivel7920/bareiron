@@ -351,11 +351,7 @@ int sc_setCenterChunk (int client_fd, int x, int y) {
 // S->C Chunk Data and Update Light
 int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
-  int max_change_y = -1;
-  for (int i = 0; i < block_changes_count; i ++) {
-    if (block_changes[i].block != 0xFF && block_changes[i].y > max_change_y)
-      max_change_y = block_changes[i].y;
-  }
+  int max_change_y = highest_block_change_y;
 
   // O terreno acima de y=80 é sempre ar, então essas seções podem ir como
   // seções uniformes de 6 bytes em vez do palette completo de 4,6 KB.
@@ -395,6 +391,7 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   send_all(client_fd, bulk, 24);
   task_yield();
 
+  precomputeChunkData(x, z);
   for (int i = 0; i < terrain_sections; i ++) {
     y = i * 16;
     send_all(client_fd, section_prefix, sizeof(section_prefix));

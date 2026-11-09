@@ -630,6 +630,7 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
       block_changes[last_real_entry + 1].y = y;
       block_changes[last_real_entry + 1].z = z;
       block_changes[last_real_entry + 1].block = block;
+      if (y > highest_block_change_y) highest_block_change_y = y;
       // Zero out the following 14 entries for item data
       for (int i = 2; i <= 15; i ++) {
         block_changes[last_real_entry + i].x = 0;
@@ -664,6 +665,7 @@ static uint8_t storeBlockChange (short x, uint8_t y, short z, uint8_t block) {
   block_changes[first_gap].y = y;
   block_changes[first_gap].z = z;
   block_changes[first_gap].block = block;
+  if (y > highest_block_change_y) highest_block_change_y = y;
   // Write change to disk (if applicable)
   #ifndef DISK_SYNC_BLOCKS_ON_INTERVAL
   writeBlockChangesToDisk(first_gap, first_gap);
