@@ -351,7 +351,7 @@ int sc_setCenterChunk (int client_fd, int x, int y) {
 // S->C Chunk Data and Update Light
 int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
-  int x = _x * 16, z = _z * 16, y;
+  int x = _x * 16, z = _z * 16;
   uint8_t max_height = precomputeChunkData(x, z);
   int terrain_sections = max_height / 16 + 1;
   int change_sections = highest_block_change_y / 16 + 1;
@@ -386,25 +386,26 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   section_prefix[4] = 0x02;
   memcpy(section_prefix + 5, network_block_palette, sizeof(network_block_palette));
 
-  // 4 bedrock sections
   for (int i = 0; i < 4; i ++) memcpy(bulk + i * 6, empty_bedrock, 6);
   send_all(client_fd, bulk, 24);
-  task_yield();
 
+  uint8_t section_buf[sizeof(section_prefix) + 4096 + 2];
+  size_t prefix_len = sizeof(section_prefix);
+  memcpy(section_buf, section_prefix, prefix_len);
   for (int i = 0; i < terrain_sections; i ++) {
-    y = i * 16;
-    send_all(client_fd, section_prefix, sizeof(section_prefix));
-    uint8_t biome = buildChunkSection(x, y, z);
-    send_all(client_fd, chunk_section, 4096);
-    uint8_t tail[2] = { 0, biome };
-    send_all(client_fd, tail, 2);
-    task_yield();
+    if (i > 0) {
+      memcpy(section_buf, section_prefix, prefix_len);
+    }
+    uint8_t biome = buildChunkSection(x, i * 16, z);
+    memcpy(section_buf + prefix_len, chunk_section, 4096);
+    section_buf[prefix_len + 4096] = 0;
+    section_buf[prefix_len + 4097] = biome;
+    send_all(client_fd, section_buf, prefix_len + 4096 + 2);
   }
 
   int empty_sections = 20 - terrain_sections;
   for (int i = 0; i < empty_sections; i ++) memcpy(bulk + i * 6, empty_air, 6);
   if (empty_sections) send_all(client_fd, bulk, empty_sections * 6);
-  task_yield();
 
   writeVarInt(client_fd, 0); // omit block entities
 
