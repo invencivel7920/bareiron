@@ -25,7 +25,7 @@
 #define MOB_DESPAWN_DISTANCE 256
 
 // Modo de jogo: 2 = aventura (menos dano)
-#define GAMEMODE 1
+#define GAMEMODE 0
 
 #define VIEW_DISTANCE 3
 

@@ -142,6 +142,15 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         if (getPlayerData(client_fd, &player)) break;
         spawnPlayer(player);
 
+        sc_setCenterChunk(client_fd, 0, 0);
+        for (int cx = -VIEW_DISTANCE; cx <= VIEW_DISTANCE; cx++) {
+          for (int cz = -VIEW_DISTANCE; cz <= VIEW_DISTANCE; cz++) {
+            sc_chunkDataAndUpdateLight(client_fd, cx, cz);
+          }
+        }
+        player->visited_x[VISITED_HISTORY - 1] = 0;
+        player->visited_z[VISITED_HISTORY - 1] = 0;
+
         for (int i = 0; i < MAX_PLAYERS; i ++) {
           if (player_data[i].client_fd == -1) continue;
           if (player_data[i].flags & 0x20) continue;
