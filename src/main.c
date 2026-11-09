@@ -96,6 +96,7 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         setClientState(client_fd, STATE_CONFIGURATION);
         if (client_fd >= 0 && client_fd < 1024) login_ack_pending[client_fd] = 1;
       } else if (state == STATE_CONFIGURATION) {
+        if (length == 0) break;
         if (cs_clientInformation(client_fd)) break;
         if (client_fd >= 0 && client_fd < 1024 && config_sent[client_fd]) break;
         if (sc_featureFlags(client_fd)) break;
