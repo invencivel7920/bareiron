@@ -79,12 +79,6 @@ void handlePacket(int client_fd, int length, int packet_id, int state);
 void handlePacket(int client_fd, int length, int packet_id, int state) {
   uint64_t bytes_received_start = total_bytes_received;
 
-  if (packet_id < 0) {
-    packet_id = readVarInt(client_fd);
-    if ((uint32_t)packet_id == VARNUM_ERROR) return;
-    length -= sizeVarInt(packet_id);
-  }
-
   switch (packet_id) {
 
     case 0x00:
@@ -658,21 +652,20 @@ int main () {
 
       int length = readVarInt(client_fd);
       if ((uint32_t)length == VARNUM_ERROR) {
-        // No data available yet; try again later
         continue;
       }
+
       int state = getClientState(client_fd);
       if (state == STATE_LOGIN && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
         state = STATE_CONFIGURATION;
       }
-      int packet_id = -1;
-      if (state != STATE_CONFIGURATION) {
-        packet_id = readVarInt(client_fd);
-        if ((uint32_t)packet_id == VARNUM_ERROR) {
-          continue;
-        }
-        length -= sizeVarInt(packet_id);
+
+      int packet_id = readVarInt(client_fd);
+      if ((uint32_t)packet_id == VARNUM_ERROR) {
+        continue;
       }
+
+      length -= sizeVarInt(packet_id);
 
       if (length < 0 || length > 2097152) {
         disconnectClient(&clients[i], 2);

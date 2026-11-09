@@ -1,6 +1,6 @@
 import { Server, Socket, SocketHandler } from "bun";
 
-const YOUR_SERVER_HOST = "192.168.1.14";   // IP do seu bareiron
+const YOUR_SERVER_HOST = "192.168.1.12";   // IP do seu bareiron
 const YOUR_SERVER_PORT = 25565;            // porta do seu servidor
 const THIS_WS_PORT = 8080;                 // porta alta, sem precisar de root
 const THIS_PUBLIC_IP = "localhost";        // para uso local
