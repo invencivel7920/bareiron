@@ -164,6 +164,9 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
           if (player_data[i].flags & 0x20) continue;
           sc_playerInfoUpdateAddPlayer(client_fd, player_data[i]);
           sc_spawnEntityPlayer(client_fd, player_data[i]);
+          sc_entityEquipment(client_fd, player_data[i].client_fd, 0,
+            player_data[i].inventory_count[player_data[i].hotbar],
+            player_data[i].inventory_items[player_data[i].hotbar]);
         }
 
         uint8_t uuid_mob[16];

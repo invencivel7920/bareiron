@@ -213,6 +213,8 @@ void handlePlayerJoin (PlayerData* player) {
     }
   }
 
+  broadcastPlayerEquipment(player);
+
   // Clear "client loading" flag and fallback timer
   player->flags &= ~0x20;
   player->flagval_16 = 0;
@@ -456,6 +458,22 @@ void broadcastPlayerMetadata (PlayerData *player) {
     if (other_player->flags & 0x20) continue;
 
     sc_setEntityMetadata(client_fd, player->client_fd, metadata, 2);
+  }
+}
+
+void broadcastPlayerEquipment (PlayerData *player) {
+  uint8_t count = player->inventory_count[player->hotbar];
+  uint16_t item = player->inventory_items[player->hotbar];
+
+  for (int i = 0; i < MAX_PLAYERS; i ++) {
+    PlayerData* other_player = &player_data[i];
+    int client_fd = other_player->client_fd;
+
+    if (client_fd == -1) continue;
+    if (client_fd == player->client_fd) continue;
+    if (other_player->flags & 0x20) continue;
+
+    sc_entityEquipment(client_fd, player->client_fd, 0, count, item);
   }
 }
 

@@ -22,6 +22,7 @@
 #include "worldgen.h"
 #include "crafting.h"
 #include "procedures.h"
+#include "procedures.h"
 #include "packets.h"
 #include "procedures.h"     // para handlePlayerAction, etc.
 
@@ -863,6 +864,7 @@ int cs_setHeldItem (int client_fd) {
   if (slot >= 9) return 1;
 
   player->hotbar = slot;
+  broadcastPlayerEquipment(player);
 
   return 0;
 }
@@ -874,6 +876,30 @@ int sc_setHeldItem (int client_fd, uint8_t slot) {
   writeVarInt(client_fd, 0x62);
 
   writeByte(client_fd, slot);
+
+  return 0;
+}
+
+// S->C Entity Equipment (clientbound)
+int sc_entityEquipment (int client_fd, int entity_id, uint8_t slot, uint8_t count, uint16_t item) {
+
+  writeVarInt(client_fd,
+    1 +
+    sizeVarInt(entity_id) +
+    1 +
+    sizeVarInt(count) +
+    (count > 0 ? sizeVarInt(item) + 2 : 0)
+  );
+  writeByte(client_fd, 0x5F);
+
+  writeVarInt(client_fd, entity_id);
+  writeByte(client_fd, slot);
+  writeVarInt(client_fd, count);
+  if (count > 0) {
+    writeVarInt(client_fd, item);
+    writeVarInt(client_fd, 0);
+    writeVarInt(client_fd, 0);
+  }
 
   return 0;
 }
