@@ -77,8 +77,13 @@ void handlePacket(int client_fd, int length, int packet_id, int state);
  * (mantido, mas com variáveis estáticas e sem logs de desenvolvimento)
  */
 void handlePacket(int client_fd, int length, int packet_id, int state) {
-  // Contagem de bytes recebidos para detectar discrepâncias
   uint64_t bytes_received_start = total_bytes_received;
+
+  if (packet_id < 0) {
+    packet_id = readVarInt(client_fd);
+    if ((uint32_t)packet_id == VARNUM_ERROR) return;
+    length -= sizeVarInt(packet_id);
+  }
 
   switch (packet_id) {
 
@@ -656,14 +661,25 @@ int main () {
         // No data available yet; try again later
         continue;
       }
-      int packet_id = readVarInt(client_fd);
-      if ((uint32_t)packet_id == VARNUM_ERROR) continue;
       int state = getClientState(client_fd);
       if (state == STATE_LOGIN && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
         state = STATE_CONFIGURATION;
       }
-      int payload_length = length - sizeVarInt(packet_id);
-      handlePacket(client_fd, payload_length, packet_id, state);
+      int packet_id = -1;
+      if (state != STATE_CONFIGURATION) {
+        packet_id = readVarInt(client_fd);
+        if ((uint32_t)packet_id == VARNUM_ERROR) {
+          continue;
+        }
+        length -= sizeVarInt(packet_id);
+      }
+
+      if (length < 0 || length > 2097152) {
+        disconnectClient(&clients[i], 2);
+        continue;
+      }
+
+      handlePacket(client_fd, length, packet_id, state);
       if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         disconnectClient(&clients[i], 4);
         continue;
