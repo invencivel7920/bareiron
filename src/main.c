@@ -122,7 +122,6 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         writeByte(client_fd, 0x01);
         writeUint64(client_fd, payload);
         recv_count = 0;
-        disconnectClient(&client_fd, 0);
         return;
       }
       break;
@@ -175,10 +174,12 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
 
     case 0x07:
       if (state == STATE_CONFIGURATION) {
-        if (cs_knownPacks(client_fd)) break;
-        if (sc_registries(client_fd)) break;
+        printf("  Serverbound Known Packs received\n");
+        if (cs_knownPacks(client_fd)) { printf("  cs_knownPacks FAILED\n"); break; }
+        printf("  Sending registries\n");
+        if (sc_registries(client_fd)) { printf("  sc_registries FAILED\n"); break; }
         printf("  Finishing configuration\n\n");
-        if (sc_finishConfiguration(client_fd)) break;
+        if (sc_finishConfiguration(client_fd)) { printf("  sc_finishConfiguration FAILED\n"); break; }
       }
       break;
 
@@ -669,18 +670,15 @@ int main () {
       if (state == STATE_LOGIN && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
         state = STATE_CONFIGURATION;
       }
-      int packet_id = -1;
-      if (state != STATE_CONFIGURATION) {
-        packet_id = readVarInt(client_fd);
-        if ((uint32_t)packet_id == VARNUM_ERROR) {
-          // No data available yet; try again later
-          continue;
-        }
-        if ((uint32_t)packet_id > 0xFF) {
-          printf("ERROR: Invalid packet id %u, disconnecting\n", (unsigned)packet_id);
-          disconnectClient(&clients[i], 3);
-          continue;
-        }
+      int packet_id = readVarInt(client_fd);
+      if ((uint32_t)packet_id == VARNUM_ERROR) {
+        // No data available yet; try again later
+        continue;
+      }
+      if ((uint32_t)packet_id > 0xFF) {
+        printf("ERROR: Invalid packet id %u, disconnecting\n", (unsigned)packet_id);
+        disconnectClient(&clients[i], 3);
+        continue;
       }
       if (state == STATE_NONE && packet_id >= 0 && length == 254 && packet_id == 122) {
         disconnectClient(&clients[i], 5);
