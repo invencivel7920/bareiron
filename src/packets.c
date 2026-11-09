@@ -363,7 +363,8 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
   const int chunk_data_size = (4101 + sizeVarInt(256) + sizeof(network_block_palette)) * terrain_sections
                             + 6 * (4 + 20 - terrain_sections);
-  const int light_data_size = 14 + (sizeVarInt(2048) + 2048) * 24;
+  const int light_sections = (terrain_sections + 1 > 24) ? 24 : terrain_sections + 1;
+  const int light_data_size = 21 + (sizeVarInt(2048) + 2048) * light_sections;
 
   writeVarInt(client_fd, 11 + sizeVarInt(chunk_data_size) + chunk_data_size + light_data_size);
   writeByte(client_fd, 0x27);
@@ -415,18 +416,21 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   // Every section gets full skylight; there is no light engine to compute
   // occlusion, and sending zeros for the lower sections left the surface
   // (y 48..63) pitch black.
+  uint64_t sky_mask = (1ULL << light_sections) - 1;
+  uint64_t empty_sky_mask = ((1ULL << 24) - 1) ^ sky_mask;
+
   writeVarInt(client_fd, 1);
-  writeUint64(client_fd, 0b111111111111111111111111);
+  writeUint64(client_fd, sky_mask);
   writeVarInt(client_fd, 0);
-  writeVarInt(client_fd, 0);
+  writeVarInt(client_fd, 1);
+  writeUint64(client_fd, empty_sky_mask);
   writeVarInt(client_fd, 0);
 
   chunk_section[0] = 0x80;
   chunk_section[1] = 0x10;
   memset(chunk_section + 2, 0xFF, 2048);
-  writeVarInt(client_fd, 24);
-  for (int i = 0; i < 24; i ++) send_all(client_fd, chunk_section, 2050);
-  // don't send block light
+  writeVarInt(client_fd, light_sections);
+  for (int i = 0; i < light_sections; i ++) send_all(client_fd, chunk_section, 2050);
   writeVarInt(client_fd, 0);
 
   // Sending block updates changes light prediciton on the client.
