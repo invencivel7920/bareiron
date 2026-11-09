@@ -16,3 +16,4 @@ dist/
 
 # Tooling caches
 .lean_ai/
+.matrixx/
