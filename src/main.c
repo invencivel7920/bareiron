@@ -691,6 +691,9 @@ int main () {
         disconnectClient(&clients[i], 2);
         continue;
       }
+      if (packet_id >= 0) {
+        length -= sizeVarInt(packet_id);
+      }
       handlePacket(client_fd, length, packet_id, state);
       if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         disconnectClient(&clients[i], 4);
