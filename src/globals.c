@@ -15,7 +15,7 @@
   #include "esp_timer.h"
 
   // Time between vTaskDelay calls in microseconds
-  #define TASK_YIELD_INTERVAL 1000 * 1000
+  #define TASK_YIELD_INTERVAL 1000
   // How many ticks to delay for on each yield
   #define TASK_YIELD_TICKS 1
 

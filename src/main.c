@@ -533,6 +533,7 @@ int main () {
   int64_t last_tick_time = GET_TIME();
 
   while (true) {
+    task_yield();
     int64_t now = GET_TIME();
     int64_t wait_us = last_tick_time + TIME_BETWEEN_TICKS - now;
     if (wait_us < 0) wait_us = 0;
