@@ -404,8 +404,8 @@ int ws_handshake_step (int client_fd) {
 
   c->http_len = 0;
   c->mode = WS_MODE_OPEN;
-  printf("WebSocket handshake complete (fd %d, protocol: %s)\n",
-         client_fd, protocol[0] ? protocol : "none");
+  printf("WebSocket handshake complete (fd %d, protocol: %s, extra_bytes: %d)\n",
+         client_fd, protocol[0] ? protocol : "none", c->in_len);
   return 1;
 }
 

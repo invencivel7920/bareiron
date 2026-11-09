@@ -46,10 +46,6 @@ static ssize_t recv_raw_all (int client_fd, void *buf, size_t n, uint8_t require
   char *p = buf;
   size_t total = 0;
 
-  // Track time of last meaningful network update
-  // Used to handle timeout when client is stalling
-  int64_t last_update_time = get_program_time();
-
   // If requested, exit early when first byte not immediately available
   if (require_first) {
     ssize_t r = recv(client_fd, p, 1, MSG_PEEK);
@@ -66,11 +62,6 @@ static ssize_t recv_raw_all (int client_fd, void *buf, size_t n, uint8_t require
     ssize_t r = recv(client_fd, p + total, n - total, 0);
     if (r < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        // handle network timeout
-        if (get_program_time() - last_update_time > RECV_STALL_TIMEOUT_TIME) {
-          disconnectClient(&client_fd, -1);
-          return -1;
-        }
         task_yield();
         continue;
       } else {
@@ -82,7 +73,6 @@ static ssize_t recv_raw_all (int client_fd, void *buf, size_t n, uint8_t require
       return -1;
     }
     total += r;
-    last_update_time = get_program_time();
   }
 
   total_bytes_received += total;
