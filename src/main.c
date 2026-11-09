@@ -686,6 +686,7 @@ int main () {
         disconnectClient(&clients[i], 5);
         continue;
       }
+      printf("DEBUG: length=%d packet_id=%d state=%d\n", length, packet_id, state);
       if (packet_id >= 0 && (length < sizeVarInt(packet_id) || length > 2097152)) {
         disconnectClient(&clients[i], 2);
         continue;
