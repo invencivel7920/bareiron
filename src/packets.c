@@ -78,12 +78,19 @@ int cs_loginStart (int client_fd, uint8_t *uuid, char *name) {
   strncpy(name, (char *)recv_buffer, 16 - 1);
   name[16 - 1] = '\0';
   printf("  Player name: %s\n", name);
-  recv_count = recv_all(client_fd, recv_buffer, 16, false);
-  if (recv_count == -1) return 1;
-  memcpy(uuid, recv_buffer, 16);
-  printf("  Player UUID: ");
-  for (int i = 0; i < 16; i ++) printf("%x", uuid[i]);
-  printf("\n\n");
+
+  uint8_t has_uuid = readByte(client_fd);
+
+  if (has_uuid) {
+    recv_count = recv_all(client_fd, recv_buffer, 16, false);
+    if (recv_count == -1) return 1;
+    memcpy(uuid, recv_buffer, 16);
+    printf("  Player UUID: ");
+    for (int i = 0; i < 16; i ++) printf("%x", uuid[i]);
+    printf("\n\n");
+  } else {
+    printf("  Player UUID: none\n\n");
+  }
 
   return 0;
 }
