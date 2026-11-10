@@ -131,7 +131,9 @@ ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
 }
 
 #define SEND_BUF_SIZE 8192
-static uint8_t send_buf[SEND_BUF_SIZE];
+#define SEND_BUF_HEADER 10
+static uint8_t send_buf[SEND_BUF_SIZE + SEND_BUF_HEADER];
+static uint8_t *send_data = send_buf + SEND_BUF_HEADER;
 static int send_buf_len = 0;
 static int send_buf_fd = -1;
 
@@ -145,12 +147,12 @@ static void flush_send_buffer (void) {
   int len = send_buf_len;
   send_buf_len = 0;
   send_buf_fd = -1;
-  if (!ws_is_open(fd)) send_raw_all(fd, send_buf, len);
+  if (!ws_is_open(fd)) send_raw_all(fd, send_data, len);
   else {
     uint8_t header[10];
     int header_len = ws_frame_header(header, (uint64_t) len);
-    if (send_raw_all(fd, header, header_len) >= 0)
-      send_raw_all(fd, send_buf, len);
+    memcpy(send_data - header_len, header, header_len);
+    send_raw_all(fd, send_data - header_len, header_len + len);
   }
 }
 
@@ -176,7 +178,7 @@ ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
     flush_send_buffer();
     send_buf_fd = client_fd;
   }
-  memcpy(send_buf + send_buf_len, buf, len);
+  memcpy(send_data + send_buf_len, buf, len);
   send_buf_len += len;
   return len;
 }
@@ -312,10 +314,7 @@ ssize_t readLengthPrefixedData (int client_fd) {
     recv_count = recv_all(client_fd, recv_buffer, MAX_RECV_BUF_LEN - 1, false);
     if (recv_count < 0) return recv_count;
     recv_buffer[recv_count] = '\0';
-    uint8_t dummy;
-    for (uint32_t i = MAX_RECV_BUF_LEN - 1; i < length; i ++) {
-      recv_all(client_fd, &dummy, 1, false);
-    }
+    discard_all(client_fd, length - (MAX_RECV_BUF_LEN - 1), false);
     return recv_count;
   }
   return recv_all(client_fd, recv_buffer, length, false);
@@ -350,10 +349,7 @@ void readStringN (int client_fd, uint32_t max_length) {
   recv_count = recv_all(client_fd, recv_buffer, max_length, false);
   if (recv_count < 0) return;
   recv_buffer[recv_count] = '\0';
-  uint8_t dummy;
-  for (uint32_t i = max_length; i < length; i ++) {
-    recv_all(client_fd, &dummy, 1, false);
-  }
+  discard_all(client_fd, length - max_length, false);
 }
 
 uint32_t fast_rand () {

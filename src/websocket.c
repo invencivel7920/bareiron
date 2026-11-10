@@ -337,7 +337,7 @@ int ws_handshake_step (int client_fd) {
     char resp[384];
     int n = snprintf(resp, sizeof(resp),
       "HTTP/1.1 302 Found\r\n"
-      "Location: https://mcraft.fun/?ip=ws://%s\r\n"
+      "Location: http://mcraft.fun/?ip=ws://%s\r\n"
       "Connection: close\r\n"
       "Content-Length: 0\r\n\r\n", target_host);
     if (n > 0 && n < (int) sizeof(resp)) ws_raw_write(c, resp, (size_t) n);

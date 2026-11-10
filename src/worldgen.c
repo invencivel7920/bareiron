@@ -173,33 +173,41 @@ uint8_t getHeightAt (int x, int z) {
 
 }
 
-uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor anchor, ChunkFeature feature, uint8_t height) {
+static inline uint8_t getOreY (int rx, int rz) {
+  uint8_t ore_y = (rx << 4) + rz;
+  ore_y ^= ore_y << 4;
+  ore_y ^= ore_y >> 5;
+  ore_y ^= ore_y << 1;
+  return ore_y & 63;
+}
+
+static inline __attribute__((always_inline)) uint8_t getTerrainAtFromCache (int x, int y, int z, ChunkAnchor *anchor, ChunkFeature *feature, uint8_t height, uint8_t ore_y) {
 
   if (y > 80) return B_air;
 
-  if (y >= 64 && y >= height && feature.y != 255) switch (anchor.biome) {
+  if (y >= 64 && y >= height && feature->y != 255) switch (anchor->biome) {
     case W_plains: { // Generate trees in the plains biome
 
       // Don't generate trees underwater
-      if (feature.y < 64) break;
+      if (feature->y < 64) break;
 
       // Handle tree stem and the dirt under it
-      if (x == feature.x && z == feature.z) {
-        if (y == feature.y - 1) return B_dirt;
-        if (y >= feature.y && y < feature.y - feature.variant + 6) return B_oak_log;
+      if (x == feature->x && z == feature->z) {
+        if (y == feature->y - 1) return B_dirt;
+        if (y >= feature->y && y < feature->y - feature->variant + 6) return B_oak_log;
       }
 
       // Get X/Z distance from center of tree
-      uint8_t dx = x > feature.x ? x - feature.x : feature.x - x;
-      uint8_t dz = z > feature.z ? z - feature.z : feature.z - z;
+      uint8_t dx = x > feature->x ? x - feature->x : feature->x - x;
+      uint8_t dz = z > feature->z ? z - feature->z : feature->z - z;
 
       // Generate leaf clusters
-      if (dx < 3 && dz < 3 && y > feature.y - feature.variant + 2 && y < feature.y - feature.variant + 5) {
-        if (y == feature.y - feature.variant + 4 && dx == 2 && dz == 2) break;
+      if (dx < 3 && dz < 3 && y > feature->y - feature->variant + 2 && y < feature->y - feature->variant + 5) {
+        if (y == feature->y - feature->variant + 4 && dx == 2 && dz == 2) break;
         return B_oak_leaves;
       }
-      if (dx < 2 && dz < 2 && y >= feature.y - feature.variant + 5 && y <= feature.y - feature.variant + 6) {
-        if (y == feature.y - feature.variant + 6 && dx == 1 && dz == 1) break;
+      if (dx < 2 && dz < 2 && y >= feature->y - feature->variant + 5 && y <= feature->y - feature->variant + 6) {
+        if (y == feature->y - feature->variant + 6 && dx == 1 && dz == 1) break;
         return B_oak_leaves;
       }
 
@@ -211,9 +219,9 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
 
     case W_desert: { // Generate dead bushes and cacti in deserts
 
-      if (x != feature.x || z != feature.z) break;
+      if (x != feature->x || z != feature->z) break;
 
-      if (feature.variant == 0) {
+      if (feature->variant == 0) {
         if (y == height + 1) return B_dead_bush;
       } else if (y > height) {
         // The size of the cactus is determined based on whether the terrain
@@ -228,13 +236,13 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
 
     case W_mangrove_swamp: { // Generate lilypads and moss carpets in swamps
 
-      if (x == feature.x && z == feature.z && y == 64 && height < 63) {
+      if (x == feature->x && z == feature->z && y == 64 && height < 63) {
         return B_lily_pad;
       }
 
       if (y == height + 1) {
-        uint8_t dx = x > feature.x ? x - feature.x : feature.x - x;
-        uint8_t dz = z > feature.z ? z - feature.z : feature.z - z;
+        uint8_t dx = x > feature->x ? x - feature->x : feature->x - x;
+        uint8_t dz = z > feature->z ? z - feature->z : feature->z - z;
         if (dx + dz < 4) return B_moss_carpet;
       }
 
@@ -243,7 +251,7 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
 
     case W_snowy_plains: { // Generate grass stubs in snowy plains
 
-      if (x == feature.x && z == feature.z && y == height + 1 && height >= 64) {
+      if (x == feature->x && z == feature->z && y == height + 1 && height >= 64) {
         return B_short_grass;
       }
 
@@ -256,13 +264,13 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
   // Handle surface-level terrain (the very topmost blocks)
   if (height >= 63) {
     if (y == height) {
-      if (anchor.biome == W_mangrove_swamp) return B_mud;
-      if (anchor.biome == W_snowy_plains) return B_snowy_grass_block;
-      if (anchor.biome == W_desert) return B_sand;
-      if (anchor.biome == W_beach) return B_sand;
+      if (anchor->biome == W_mangrove_swamp) return B_mud;
+      if (anchor->biome == W_snowy_plains) return B_snowy_grass_block;
+      if (anchor->biome == W_desert) return B_sand;
+      if (anchor->biome == W_beach) return B_sand;
       return B_grass_block;
     }
-    if (anchor.biome == W_snowy_plains && y == height + 1) {
+    if (anchor->biome == W_snowy_plains && y == height + 1) {
       return B_snow;
     }
   }
@@ -272,21 +280,11 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
     int8_t gap = height - TERRAIN_BASE_HEIGHT;
     if (y < CAVE_BASE_DEPTH + gap && y > CAVE_BASE_DEPTH - gap) return B_air;
 
-    // The chunk-relative X and Z coordinates are used as the seed for an
-    // xorshift RNG/hash function to generate the Y coordinate of the ore
-    // in this column. This way, each column is guaranteed to have exactly
-    // one ore candidate, as there will always be a Y value to reference.
-    uint8_t ore_y = ((rx & 15) << 4) + (rz & 15);
-    ore_y ^= ore_y << 4;
-    ore_y ^= ore_y >> 5;
-    ore_y ^= ore_y << 1;
-    ore_y &= 63;
-
     if (y == ore_y) {
       // Since the ore Y coordinate is effectely a random number in range [0;64),
       // we use it in a bit shift with the chunk's anchor hash to get another
       // pseudo-random number for the ore's rarity.
-      uint8_t ore_probability = (anchor.hash >> (ore_y % 24)) & 255;
+      uint8_t ore_probability = (anchor->hash >> (ore_y % 24)) & 255;
       // Ore placement is determined by Y level and "probability"
       if (y < 15) {
         if (ore_probability < 10) return B_diamond_ore;
@@ -311,13 +309,13 @@ uint8_t getTerrainAtFromCache (int x, int y, int z, int rx, int rz, ChunkAnchor 
   }
   // Handle the space between stone and grass
   if (y <= height) {
-    if (anchor.biome == W_desert) return B_sandstone;
-    if (anchor.biome == W_mangrove_swamp) return B_mud;
-    if (anchor.biome == W_beach && height > 64) return B_sandstone;
+    if (anchor->biome == W_desert) return B_sandstone;
+    if (anchor->biome == W_mangrove_swamp) return B_mud;
+    if (anchor->biome == W_beach && height > 64) return B_sandstone;
     return B_dirt;
   }
   // If all else failed, but we're below sea level, generate water (or ice)
-  if (y == 63 && anchor.biome == W_snowy_plains) return B_ice;
+  if (y == 63 && anchor->biome == W_snowy_plains) return B_ice;
   if (y < 64) return B_water;
 
   // For everything else, fall back to air
@@ -372,7 +370,7 @@ uint8_t getTerrainAt (int x, int y, int z, ChunkAnchor anchor) {
   ChunkFeature feature = getFeatureFromAnchor(anchor);
   uint8_t height = getHeightAtFromHash(rx, rz, anchor.x, anchor.z, anchor.hash, anchor.biome);
 
-  return getTerrainAtFromCache(x, y, z, rx, rz, anchor, feature, height);
+  return getTerrainAtFromCache(x, y, z, &anchor, &feature, height, getOreY(rx, rz));
 
 }
 
@@ -400,6 +398,7 @@ uint8_t chunk_section[4096];
 ChunkAnchor chunk_anchors[(16 / CHUNK_SIZE + 1) * (16 / CHUNK_SIZE + 1)];
 ChunkFeature chunk_features[256 / (CHUNK_SIZE * CHUNK_SIZE)];
 uint8_t chunk_section_height[16][16];
+static uint8_t chunk_ore_y[16][16];
 
 // Must be called once per chunk before buildChunkSection.
 uint8_t precomputeChunkData (int cx, int cz) {
@@ -433,6 +432,8 @@ uint8_t precomputeChunkData (int cx, int cz) {
       uint8_t height = getHeightAtFromAnchors(j % CHUNK_SIZE, i % CHUNK_SIZE, anchor_ptr);
       chunk_section_height[j][i] = height;
       if (height > max_height) max_height = height;
+
+      chunk_ore_y[j][i] = getOreY(j % CHUNK_SIZE, i % CHUNK_SIZE);
     }
   }
   return max_height;
@@ -448,8 +449,11 @@ uint8_t buildChunkSection (int cx, int cy, int cz) {
     // These values don't change in the lower array,
     // since all of the operations are on multiples of 8
     int y = j / 256 + cy;
+    if (y > 80) {
+      memset(chunk_section + j, B_air, 8);
+      continue;
+    }
     int rz = j / 16 % 16;
-    int rz_mod = rz % CHUNK_SIZE;
     feature_index = (j % 16) / CHUNK_SIZE + (j / 16 % 16) / CHUNK_SIZE * (16 / CHUNK_SIZE);
     anchor_index = (j % 16) / CHUNK_SIZE + (j / 16 % 16) / CHUNK_SIZE * (16 / CHUNK_SIZE + 1);
     // The client expects "big-endian longs", which in our
@@ -461,10 +465,10 @@ uint8_t buildChunkSection (int cx, int cy, int cz) {
       // Combine all of the cached data to retrieve the block
       chunk_section[j + 7 - offset] = getTerrainAtFromCache(
         rx + cx, y, rz + cz,
-        rx % CHUNK_SIZE, rz_mod,
-        chunk_anchors[anchor_index],
-        chunk_features[feature_index],
-        chunk_section_height[rx][rz]
+        &chunk_anchors[anchor_index],
+        &chunk_features[feature_index],
+        chunk_section_height[rx][rz],
+        chunk_ore_y[rx][rz]
       );
     }
   }

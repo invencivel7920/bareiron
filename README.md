@@ -45,7 +45,7 @@ The client performs `GET /` with `Upgrade: websocket`, `Connection: Upgrade` and
 ## mcraft.fun (web client) native support
 The server accepts browser WebSocket connections directly (no external proxy). In mcraft.fun, connect to `ws://<ip-do-servidor>:25565`. Opening `http://<ip-do-servidor>:25565` in a browser redirects to mcraft.fun with the correct server address.
 
-Because mcraft.fun is served over HTTPS, a browser may block a `ws://` connection as mixed content. In that case put a TLS-terminating reverse proxy in front of the ESP32 and use `wss://`; the firmware itself does not implement TLS.
+Because browsers block `ws://` from an HTTPS page as mixed content, the server deliberately redirects to **`http://mcraft.fun`** (not HTTPS). The page origin is then insecure, so the browser allows the direct `ws://` connection; no proxy or TLS is needed. This also means mcraft.fun is loaded over plain HTTP: use it only on a trusted network. If your browser enforces HTTPS-only mode, add an exception for mcraft.fun or put a TLS-terminating reverse proxy in front of the ESP32 and use `wss://`.
 
 ## Non-volatile storage (optional)
 This section applies to those who target ESP variants and wish to persist world data after a shutdown. Persistence is off by default: chunks are regenerated procedurally and block changes live in RAM. Define `SYNC_WORLD_TO_DISK` in `globals.h` to enable it.
