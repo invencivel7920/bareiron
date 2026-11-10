@@ -16,6 +16,7 @@ extern uint64_t total_bytes_received;
 ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first);
 ssize_t send_all (int client_fd, const void *buf, ssize_t len);
 void flush_send_all (void);
+void flush_pending (void);
 void discard_all (int client_fd, size_t remaining, uint8_t require_first);
 int conn_poll_readable (int client_fd);
 

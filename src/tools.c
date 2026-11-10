@@ -79,51 +79,6 @@ static ssize_t recv_raw_all (int client_fd, void *buf, size_t n, uint8_t require
   return total; // got exactly n bytes
 }
 
-static ssize_t send_raw_all (int client_fd, const void *buf, ssize_t len) {
-  // Treat any input buffer as *uint8_t for simplicity
-  const uint8_t *p = (const uint8_t *)buf;
-  ssize_t sent = 0;
-
-  // Track time of last meaningful network update
-  // Used to handle timeout when client is stalling
-  int64_t last_update_time = get_program_time();
-
-  // Busy-wait (with task yielding) until all data has been sent
-  while (sent < len) {
-    #ifdef _WIN32
-      ssize_t n = send(client_fd, p + sent, len - sent, 0);
-    #else
-      ssize_t n = send(client_fd, p + sent, len - sent, MSG_NOSIGNAL);
-    #endif
-    if (n > 0) { // some data was sent, log it
-      sent += n;
-      last_update_time = get_program_time();
-      continue;
-    }
-    if (n == 0) { // connection was closed, treat this as an error
-      errno = ECONNRESET;
-      return -1;
-    }
-    // not yet ready to transmit, try again
-    #ifdef _WIN32 //handles windows socket timeout
-      int err = WSAGetLastError();
-      if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
-    #else
-    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
-    #endif
-      // handle network timeout
-      if (get_program_time() - last_update_time > SEND_STALL_TIMEOUT_TIME) {
-        disconnectClient(&client_fd, -2);
-        return -1;
-      }
-      task_yield();
-      continue;
-    }
-    return -1; // real error
-  }
-
-  return sent;
-}
 
 ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
   if (ws_is_open(client_fd)) return ws_recv(client_fd, buf, n, require_first);
@@ -137,6 +92,28 @@ static uint8_t *send_data = send_buf + SEND_BUF_HEADER;
 static int send_buf_len = 0;
 static int send_buf_fd = -1;
 
+static uint8_t pending_buf[SEND_BUF_SIZE + SEND_BUF_HEADER];
+static int pending_fd = -1;
+static size_t pending_len = 0;
+static size_t pending_off = 0;
+
+static ssize_t send_raw_nb (int client_fd, const void *buf, size_t len) {
+  const uint8_t *p = (const uint8_t *)buf;
+  size_t sent = 0;
+  while (sent < len) {
+    #ifdef MSG_NOSIGNAL
+    ssize_t n = send(client_fd, p + sent, len - sent, MSG_NOSIGNAL);
+    #else
+    ssize_t n = send(client_fd, p + sent, len - sent, 0);
+    #endif
+    if (n > 0) { sent += (size_t)n; continue; }
+    if (n == 0) return -1;
+    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) return (ssize_t)sent;
+    return -1;
+  }
+  return (ssize_t)sent;
+}
+
 static void flush_send_buffer (void) {
   if (send_buf_fd < 0 || send_buf_len <= 0) {
     send_buf_len = 0;
@@ -147,39 +124,75 @@ static void flush_send_buffer (void) {
   int len = send_buf_len;
   send_buf_len = 0;
   send_buf_fd = -1;
-  if (!ws_is_open(fd)) send_raw_all(fd, send_data, len);
-  else {
+
+  uint8_t frame_buf[SEND_BUF_SIZE + SEND_BUF_HEADER];
+  int frame_len;
+  if (!ws_is_open(fd)) {
+    memcpy(frame_buf, send_data, len);
+    frame_len = len;
+  } else {
     uint8_t header[10];
     int header_len = ws_frame_header(header, (uint64_t) len);
-    memcpy(send_data - header_len, header, header_len);
-    send_raw_all(fd, send_data - header_len, header_len + len);
+    memcpy(frame_buf, header, header_len);
+    memcpy(frame_buf + header_len, send_data, len);
+    frame_len = header_len + len;
+  }
+
+  ssize_t sent = send_raw_nb(fd, frame_buf, frame_len);
+  if (sent < 0) sent = 0;
+  if (sent < frame_len) {
+    pending_fd = fd;
+    pending_len = (size_t)(frame_len - sent);
+    pending_off = 0;
+    memcpy(pending_buf, frame_buf + sent, pending_len);
+  }
+}
+
+void flush_pending (void) {
+  if (pending_len == 0) return;
+  ssize_t sent = send_raw_nb(pending_fd, pending_buf + pending_off, pending_len - pending_off);
+  if (sent < 0) return;
+  pending_off += (size_t)sent;
+  if (pending_off >= pending_len) {
+    pending_len = 0;
+    pending_off = 0;
+    pending_fd = -1;
   }
 }
 
 void flush_send_all (void) {
   flush_send_buffer();
+  flush_pending();
 }
 
 ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
   if (len <= 0) return 0;
+
+  flush_pending();
+
   if (send_buf_fd != client_fd) {
     flush_send_buffer();
     send_buf_fd = client_fd;
   }
-  if (len >= SEND_BUF_SIZE) {
-    flush_send_buffer();
-    if (!ws_is_open(client_fd)) return send_raw_all(client_fd, buf, len);
-    uint8_t header[10];
-    int header_len = ws_frame_header(header, (uint64_t) len);
-    if (send_raw_all(client_fd, header, header_len) < 0) return -1;
-    return send_raw_all(client_fd, buf, len);
-  }
+
   if (send_buf_len + len > SEND_BUF_SIZE) {
     flush_send_buffer();
     send_buf_fd = client_fd;
+    if (len >= SEND_BUF_SIZE) {
+      ssize_t sent = send_raw_nb(client_fd, buf, len);
+      if (sent < 0) sent = 0;
+      if (sent < len) {
+        pending_fd = client_fd;
+        pending_len = (size_t)(len - sent);
+        pending_off = 0;
+        memcpy(pending_buf, (const uint8_t *)buf + sent, pending_len);
+      }
+      return len;
+    }
   }
+
   memcpy(send_data + send_buf_len, buf, len);
-  send_buf_len += len;
+  send_buf_len += (int)len;
   return len;
 }
 

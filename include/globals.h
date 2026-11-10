@@ -9,7 +9,8 @@
   #define WIFI_PASS "77r1ucvq"
   void task_yield ();
 #else
-  #define task_yield();
+  #include <unistd.h>
+  #define task_yield() usleep(100)
 #endif
 #include <stdbool.h>
 // TCP port, Minecraft's default is 25565

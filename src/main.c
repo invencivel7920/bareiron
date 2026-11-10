@@ -652,6 +652,16 @@ int main () {
         #endif
         int nodelay = 1;
         setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, (char *)&nodelay, sizeof(nodelay));
+        #ifndef _WIN32
+        #ifdef TCP_QUICKACK
+        int quickack = 1;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_QUICKACK, (char *)&quickack, sizeof(quickack));
+        #endif
+        int sndbuf = 65536;
+        setsockopt(new_fd, SOL_SOCKET, SO_SNDBUF, (char *)&sndbuf, sizeof(sndbuf));
+        int rcvbuf = 65536;
+        setsockopt(new_fd, SOL_SOCKET, SO_RCVBUF, (char *)&rcvbuf, sizeof(rcvbuf));
+        #endif
         client_count ++;
         ws_client_init(new_fd);
         if (new_fd >= 0 && new_fd < 1024) {
@@ -734,6 +744,7 @@ int main () {
     }
 
     process_chunk_queue();
+    flush_pending();
   }
 
   close(server_fd);
