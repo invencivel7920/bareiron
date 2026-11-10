@@ -291,7 +291,7 @@ int ws_sniff (int client_fd) {
   if (peek[0] == 'G' && peek[1] == 'E' && peek[2] == 'T' && peek[3] == ' ') {
     c->mode = WS_MODE_HANDSHAKE;
   } else {
-    c->mode = WS_MODE_RAW;
+    return -1;
   }
   return 1;
 }

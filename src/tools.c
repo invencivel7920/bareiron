@@ -130,13 +130,55 @@ ssize_t recv_all (int client_fd, void *buf, size_t n, uint8_t require_first) {
   return recv_raw_all(client_fd, buf, n, require_first);
 }
 
+#define SEND_BUF_SIZE 8192
+static uint8_t send_buf[SEND_BUF_SIZE];
+static int send_buf_len = 0;
+static int send_buf_fd = -1;
+
+static void flush_send_buffer (void) {
+  if (send_buf_fd < 0 || send_buf_len <= 0) {
+    send_buf_len = 0;
+    send_buf_fd = -1;
+    return;
+  }
+  int fd = send_buf_fd;
+  int len = send_buf_len;
+  send_buf_len = 0;
+  send_buf_fd = -1;
+  if (!ws_is_open(fd)) send_raw_all(fd, send_buf, len);
+  else {
+    uint8_t header[10];
+    int header_len = ws_frame_header(header, (uint64_t) len);
+    if (send_raw_all(fd, header, header_len) >= 0)
+      send_raw_all(fd, send_buf, len);
+  }
+}
+
+void flush_send_all (void) {
+  flush_send_buffer();
+}
+
 ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
   if (len <= 0) return 0;
-  if (!ws_is_open(client_fd)) return send_raw_all(client_fd, buf, len);
-  uint8_t header[10];
-  int header_len = ws_frame_header(header, (uint64_t) len);
-  if (send_raw_all(client_fd, header, header_len) < 0) return -1;
-  return send_raw_all(client_fd, buf, len);
+  if (send_buf_fd != client_fd) {
+    flush_send_buffer();
+    send_buf_fd = client_fd;
+  }
+  if (len >= SEND_BUF_SIZE) {
+    flush_send_buffer();
+    if (!ws_is_open(client_fd)) return send_raw_all(client_fd, buf, len);
+    uint8_t header[10];
+    int header_len = ws_frame_header(header, (uint64_t) len);
+    if (send_raw_all(client_fd, header, header_len) < 0) return -1;
+    return send_raw_all(client_fd, buf, len);
+  }
+  if (send_buf_len + len > SEND_BUF_SIZE) {
+    flush_send_buffer();
+    send_buf_fd = client_fd;
+  }
+  memcpy(send_buf + send_buf_len, buf, len);
+  send_buf_len += len;
+  return len;
 }
 
 int conn_poll_readable (int client_fd) {

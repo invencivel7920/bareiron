@@ -36,22 +36,21 @@ Here's a summary of some of the more important yet less trivial options for thos
 - If you experience crashes or instability related to chests or water, those features can be disabled with `ALLOW_CHESTS` and `DO_FLUID_FLOW`, respectively.
 - If you find frequent repeated chunk generation to choke the server, increasing `VISITED_HISTORY` might help. There isn't _that_ much of a memory footprint for this - increasing it to `64` for example would only take up 240 extra bytes per allocated player.
 
-## Transport: TCP raw + WebSocket
+## Transport: WebSocket only
 
-The server listens on `PORT 25565` and accepts two transport types on the same port:
+The server listens on `PORT 25565` and requires an RFC 6455 WebSocket upgrade. A plain Minecraft TCP client is rejected as soon as the first bytes are not an HTTP `GET`.
 
-- **TCP raw**: the classic Minecraft protocol. The client connects directly and sends Minecraft packets (VarInt length + packet ID + body). This is what the vanilla Minecraft client uses.
-- **WebSocket** (RFC 6455): the client performs an HTTP upgrade handshake (`GET /` with `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Key`) and, after receiving `101 Switching Protocols`, exchanges binary frames (opcode `0x82`) whose payloads are Minecraft packets.
-
-The server auto-detects the transport: if the first bytes are `GET `, it treats the connection as a WebSocket handshake; otherwise it assumes raw TCP. WebSocket URL example: `ws://<ip-do-servidor>:25565`.
+The client performs `GET /` with `Upgrade: websocket`, `Connection: Upgrade` and `Sec-WebSocket-Key`; after `101 Switching Protocols`, both sides exchange binary frames (opcode `0x82`) whose payload is the Minecraft packet stream. WebSocket URL example: `ws://<ip-do-servidor>:25565`.
 
 ## mcraft.fun (web client) native support
 The server accepts browser WebSocket connections directly (no external proxy). In mcraft.fun, connect to `ws://<ip-do-servidor>:25565`. Opening `http://<ip-do-servidor>:25565` in a browser redirects to mcraft.fun with the correct server address.
 
-## Non-volatile storage (optional)
-This section applies to those who target ESP variants and wish to persist world data after a shutdown. *This is not necessary on PC platforms*, as world and player data is written to `world.bin` by default.
+Because mcraft.fun is served over HTTPS, a browser may block a `ws://` connection as mixed content. In that case put a TLS-terminating reverse proxy in front of the ESP32 and use `wss://`; the firmware itself does not implement TLS.
 
-The ESP build mounts the built-in **SPIFFS** driver on the `storage` partition (see `partitions.csv`) and stores `world.bin` there, so no external component is required. `SYNC_WORLD_TO_DISK` is enabled by default and the world is flushed every `DISK_SYNC_INTERVAL` microseconds. Since flash writes are typically slow and blocking, you'll likely want to uncomment `DISK_SYNC_BLOCKS_ON_INTERVAL` to batch block changes instead of writing on every edit. Depending on the flash size of your board, you may also have to decrease `MAX_BLOCK_CHANGES`, so that the world data fits in the SPIFFS partition.
+## Non-volatile storage (optional)
+This section applies to those who target ESP variants and wish to persist world data after a shutdown. Persistence is off by default: chunks are regenerated procedurally and block changes live in RAM. Define `SYNC_WORLD_TO_DISK` in `globals.h` to enable it.
+
+The ESP build mounts the built-in **SPIFFS** driver on the `storage` partition (see `partitions.csv`) and stores `world.bin` there, so no external component is required. When enabled, the world is flushed every `DISK_SYNC_INTERVAL` microseconds. Since flash writes are typically slow and blocking, you'll likely want to uncomment `DISK_SYNC_BLOCKS_ON_INTERVAL` to batch block changes instead of writing on every edit. Depending on the flash size of your board, you may also have to decrease `MAX_BLOCK_CHANGES`, so that the world data fits in the SPIFFS partition.
 
 If using an SD card module or other virtual file system, you'll have to implement the filesystem setup routine on your own. The built-in serializer should still work though, as it uses POSIX filesystem calls.
 

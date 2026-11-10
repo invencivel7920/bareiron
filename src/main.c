@@ -21,7 +21,6 @@
   #include "esp_timer.h"
   #include "lwip/sockets.h"
   #include "lwip/netdb.h"
-  #include "lwip/tcp.h"
 #else
   #include <sys/types.h>
   #ifdef _WIN32
@@ -31,13 +30,11 @@
     #include <sys/socket.h>
     #include <sys/select.h>
     #include <netinet/in.h>
+    #include <netinet/tcp.h>
     #include <arpa/inet.h>
   #endif
   #include <unistd.h>
   #include <time.h>
-  #ifndef _WIN32
-    #include <netinet/tcp.h>
-  #endif
 #endif
 
 #include "globals.h"
@@ -48,6 +45,7 @@
 #include "registries.h"
 #include "procedures.h"
 #include "websocket.h"
+#include "serialize.h"
 
 // ============================================================
 //  MACROS DE PERFORMANCE (renomeadas para evitar conflito)
@@ -62,6 +60,29 @@ static uint8_t uuid[16];
 static char name[16];
 static int login_ack_pending[1024];
 static int config_sent[1024];
+
+#define CHUNK_QUEUE_SIZE 64
+typedef struct { int fd; short cx, cz; } ChunkJob;
+static ChunkJob chunk_queue[CHUNK_QUEUE_SIZE];
+static int chunk_queue_head = 0, chunk_queue_tail = 0;
+
+static void enqueue_chunk (int fd, short cx, short cz) {
+  int next = (chunk_queue_tail + 1) % CHUNK_QUEUE_SIZE;
+  if (next == chunk_queue_head) return;
+  chunk_queue[chunk_queue_tail].fd = fd;
+  chunk_queue[chunk_queue_tail].cx = cx;
+  chunk_queue[chunk_queue_tail].cz = cz;
+  chunk_queue_tail = next;
+}
+
+static void process_chunk_queue (void) {
+  if (chunk_queue_head == chunk_queue_tail) return;
+  ChunkJob *job = &chunk_queue[chunk_queue_head];
+  chunk_queue_head = (chunk_queue_head + 1) % CHUNK_QUEUE_SIZE;
+  if (getClientState(job->fd) != STATE_PLAY) return;
+  sc_chunkDataAndUpdateLight(job->fd, job->cx, job->cz);
+  flush_send_all();
+}
 
 // Declaração da função handlePacket (definida abaixo)
 void handlePacket(int client_fd, int length, int packet_id, int state);
@@ -146,14 +167,9 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         spawnPlayer(player);
 
         sc_setCenterChunk(client_fd, 0, 0);
-        sc_chunkDataAndUpdateLight(client_fd, 0, 0);
-        player->chunk_queue_count = 0;
         for (int cx = -VIEW_DISTANCE; cx <= VIEW_DISTANCE; cx++) {
           for (int cz = -VIEW_DISTANCE; cz <= VIEW_DISTANCE; cz++) {
-            if (cx == 0 && cz == 0) continue;
-            player->chunk_queue_x[player->chunk_queue_count] = cx;
-            player->chunk_queue_z[player->chunk_queue_count] = cz;
-            player->chunk_queue_count ++;
+            enqueue_chunk(client_fd, cx, cz);
           }
         }
         player->visited_x[VISITED_HISTORY - 1] = 0;
@@ -164,9 +180,6 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
           if (player_data[i].flags & 0x20) continue;
           sc_playerInfoUpdateAddPlayer(client_fd, player_data[i]);
           sc_spawnEntityPlayer(client_fd, player_data[i]);
-          sc_entityEquipment(client_fd, player_data[i].client_fd, 0,
-            player_data[i].inventory_count[player_data[i].hotbar],
-            player_data[i].inventory_items[player_data[i].hotbar]);
         }
 
         uint8_t uuid_mob[16];
@@ -389,27 +402,21 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
           }
         }
 
-        int count = 0;
-        // Log removido para economizar CPU
         sc_setCenterChunk(client_fd, _x, _z);
 
         while (dx != 0) {
-          sc_chunkDataAndUpdateLight(client_fd, _x + dx * VIEW_DISTANCE, _z);
-          count ++;
+          enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z);
           for (int i = 1; i <= VIEW_DISTANCE; i ++) {
-            sc_chunkDataAndUpdateLight(client_fd, _x + dx * VIEW_DISTANCE, _z - i);
-            sc_chunkDataAndUpdateLight(client_fd, _x + dx * VIEW_DISTANCE, _z + i);
-            count += 2;
+            enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z - i);
+            enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z + i);
           }
           dx += dx > 0 ? -1 : 1;
         }
         while (dz != 0) {
-          sc_chunkDataAndUpdateLight(client_fd, _x, _z + dz * VIEW_DISTANCE);
-          count ++;
+          enqueue_chunk(client_fd, _x, _z + dz * VIEW_DISTANCE);
           for (int i = 1; i <= VIEW_DISTANCE; i ++) {
-            sc_chunkDataAndUpdateLight(client_fd, _x - i, _z + dz * VIEW_DISTANCE);
-            sc_chunkDataAndUpdateLight(client_fd, _x + i, _z + dz * VIEW_DISTANCE);
-            count += 2;
+            enqueue_chunk(client_fd, _x - i, _z + dz * VIEW_DISTANCE);
+            enqueue_chunk(client_fd, _x + i, _z + dz * VIEW_DISTANCE);
           }
           dz += dz > 0 ? -1 : 1;
         }
@@ -488,6 +495,7 @@ int main () {
     block_changes[i].block = 0xFF;
   }
 
+  if (initSerializer()) exit(EXIT_FAILURE);
 
   int clients[MAX_PLAYERS];
   for (int i = 0; i < MAX_PLAYERS; i ++) {
@@ -552,17 +560,7 @@ int main () {
     int64_t now = GET_TIME();
     int64_t wait_us = last_tick_time + TIME_BETWEEN_TICKS - now;
     if (wait_us < 0) wait_us = 0;
-
-    bool chunk_pending = false;
-    for (int i = 0; i < MAX_PLAYERS; i ++) {
-      if (player_data[i].client_fd == -1 || player_data[i].chunk_queue_count == 0) continue;
-      if (getClientState(player_data[i].client_fd) != STATE_PLAY) continue;
-      int idx = -- player_data[i].chunk_queue_count;
-      sc_chunkDataAndUpdateLight(player_data[i].client_fd,
-        player_data[i].chunk_queue_x[idx], player_data[i].chunk_queue_z[idx]);
-      chunk_pending = true;
-    }
-    if (chunk_pending) wait_us = 0;
+    if (chunk_queue_head != chunk_queue_tail && wait_us > 1000) wait_us = 1000;
 
     fd_set read_fds;
     FD_ZERO(&read_fds);
@@ -597,6 +595,7 @@ int main () {
     now = GET_TIME();
     if (now - last_tick_time >= TIME_BETWEEN_TICKS) {
       handleServerTick(now - last_tick_time);
+      flush_send_all();
       last_tick_time = now;
     }
 
@@ -624,8 +623,6 @@ int main () {
           continue;
         }
         clients[slot] = new_fd;
-        int no_delay = 1;
-        setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &no_delay, sizeof(no_delay));
         #ifdef _WIN32
         u_long mode = 1;
         ioctlsocket(new_fd, FIONBIO, &mode);
@@ -633,6 +630,8 @@ int main () {
         int flags = fcntl(new_fd, F_GETFL, 0);
         fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
         #endif
+        int nodelay = 1;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, (char *)&nodelay, sizeof(nodelay));
         client_count ++;
         ws_client_init(new_fd);
         if (new_fd >= 0 && new_fd < 1024) {
@@ -704,6 +703,7 @@ int main () {
       }
 
       handlePacket(client_fd, length, packet_id, state);
+      flush_send_all();
       if (recv_count == 0 || (recv_count == -1 && errno != EAGAIN && errno != EWOULDBLOCK)) {
         if (state == STATE_STATUS) {
           continue;
@@ -712,6 +712,8 @@ int main () {
         continue;
       }
     }
+
+    process_chunk_queue();
   }
 
   close(server_fd);

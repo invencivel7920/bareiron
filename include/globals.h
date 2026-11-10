@@ -27,8 +27,7 @@
 // Modo de jogo: 2 = aventura (menos dano)
 #define GAMEMODE 0
 
-#define VIEW_DISTANCE 3
-#define CHUNK_QUEUE_SIZE ((2 * VIEW_DISTANCE + 1) * (2 * VIEW_DISTANCE + 1))
+#define VIEW_DISTANCE 2
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
 #define TIME_BETWEEN_TICKS 500000
@@ -127,9 +126,6 @@ typedef struct {
   short z;
   short visited_x[VISITED_HISTORY];
   short visited_z[VISITED_HISTORY];
-  int8_t chunk_queue_x[CHUNK_QUEUE_SIZE];
-  int8_t chunk_queue_z[CHUNK_QUEUE_SIZE];
-  uint8_t chunk_queue_count;
   #ifdef SCALE_MOVEMENT_UPDATES_TO_PLAYER_COUNT
     uint16_t packets_since_update;
   #endif
@@ -172,7 +168,6 @@ typedef struct {
 
 extern BlockChange block_changes[MAX_BLOCK_CHANGES];
 extern int block_changes_count;
-extern uint8_t highest_block_change_y;
 extern PlayerData player_data[MAX_PLAYERS];
 extern int player_data_count;
 extern MobData mob_data[MAX_MOBS];

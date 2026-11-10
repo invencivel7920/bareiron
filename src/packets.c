@@ -22,8 +22,8 @@
 #include "worldgen.h"
 #include "crafting.h"
 #include "procedures.h"
-#include "procedures.h"
 #include "packets.h"
+#include "serialize.h"      // para writeDataToDiskOnInterval
 #include "procedures.h"     // para handlePlayerAction, etc.
 
 // Variáveis externas
@@ -353,16 +353,26 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
 
   int x = _x * 16, z = _z * 16;
   uint8_t max_height = precomputeChunkData(x, z);
-  int terrain_sections = max_height / 16 + 1;
-  int change_sections = highest_block_change_y / 16 + 1;
+
+  int max_change_y = -1;
+  for (int i = 0; i < block_changes_count; i ++) {
+    if (block_changes[i].block != 0xFF && block_changes[i].y > max_change_y)
+      max_change_y = block_changes[i].y;
+  }
+
+  // +7 covers tree canopies, which can rise above the terrain height.
+  int terrain_sections = (max_height + 7) / 16 + 1;
+  int change_sections = max_change_y / 16 + 1;
   if (change_sections > terrain_sections) terrain_sections = change_sections;
   if (terrain_sections < 4) terrain_sections = 4;
   if (terrain_sections > 20) terrain_sections = 20;
 
   const int chunk_data_size = (4101 + sizeVarInt(256) + sizeof(network_block_palette)) * terrain_sections
                             + 6 * (4 + 20 - terrain_sections);
-  const int light_sections = (terrain_sections + 1 > 24) ? 24 : terrain_sections + 1;
-  const int light_data_size = 21 + (sizeVarInt(2048) + 2048) * light_sections;
+  const uint64_t sky_light_mask = 0x38; // sections 3..5 (y 48..95)
+  const uint64_t empty_sky_light_mask = 0xFFFFFF & ~sky_light_mask;
+  const int light_sections = 3;
+  const int light_data_size = 29 + (sizeVarInt(2048) + 2048) * light_sections + 1;
 
   writeVarInt(client_fd, 11 + sizeVarInt(chunk_data_size) + chunk_data_size + light_data_size);
   writeByte(client_fd, 0x27);
@@ -373,6 +383,8 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   writeVarInt(client_fd, 0); // omit heightmaps
 
   writeVarInt(client_fd, chunk_data_size);
+
+  int y;
 
   static const uint8_t empty_bedrock[6] = { 0x10, 0x00, 0x00, 0x55, 0x00, 0x00 };
   static const uint8_t empty_air[6] = { 0x10, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -386,21 +398,19 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   section_prefix[4] = 0x02;
   memcpy(section_prefix + 5, network_block_palette, sizeof(network_block_palette));
 
+  // 4 bedrock sections
   for (int i = 0; i < 4; i ++) memcpy(bulk + i * 6, empty_bedrock, 6);
   send_all(client_fd, bulk, 24);
+  task_yield();
 
-  uint8_t section_buf[sizeof(section_prefix) + 4096 + 2];
-  size_t prefix_len = sizeof(section_prefix);
-  memcpy(section_buf, section_prefix, prefix_len);
   for (int i = 0; i < terrain_sections; i ++) {
-    if (i > 0) {
-      memcpy(section_buf, section_prefix, prefix_len);
-    }
-    uint8_t biome = buildChunkSection(x, i * 16, z);
-    memcpy(section_buf + prefix_len, chunk_section, 4096);
-    section_buf[prefix_len + 4096] = 0;
-    section_buf[prefix_len + 4097] = biome;
-    send_all(client_fd, section_buf, prefix_len + 4096 + 2);
+    y = i * 16;
+    send_all(client_fd, section_prefix, sizeof(section_prefix));
+    uint8_t biome = buildChunkSection(x, y, z);
+    send_all(client_fd, chunk_section, 4096);
+    uint8_t tail[2] = { 0, biome };
+    send_all(client_fd, tail, 2);
+    task_yield();
   }
 
   int empty_sections = 20 - terrain_sections;
@@ -414,21 +424,20 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   // Every section gets full skylight; there is no light engine to compute
   // occlusion, and sending zeros for the lower sections left the surface
   // (y 48..63) pitch black.
-  uint64_t sky_mask = (1ULL << light_sections) - 1;
-  uint64_t empty_sky_mask = ((1ULL << 24) - 1) ^ sky_mask;
-
   writeVarInt(client_fd, 1);
-  writeUint64(client_fd, sky_mask);
+  writeUint64(client_fd, sky_light_mask);
   writeVarInt(client_fd, 0);
   writeVarInt(client_fd, 1);
-  writeUint64(client_fd, empty_sky_mask);
-  writeVarInt(client_fd, 0);
+  writeUint64(client_fd, empty_sky_light_mask);
+  writeVarInt(client_fd, 1);
+  writeUint64(client_fd, 0xFFFFFF);
 
   chunk_section[0] = 0x80;
   chunk_section[1] = 0x10;
   memset(chunk_section + 2, 0xFF, 2048);
   writeVarInt(client_fd, light_sections);
   for (int i = 0; i < light_sections; i ++) send_all(client_fd, chunk_section, 2050);
+  // don't send block light
   writeVarInt(client_fd, 0);
 
   // Sending block updates changes light prediciton on the client.
@@ -602,6 +611,7 @@ int cs_useItemOn (int client_fd) {
   broadcastBlockChange(x, y, z, new_block);
 
   // Salva no LittleFS (se habilitado)
+  writeDataToDiskOnInterval();
 
   return 0;
 }
@@ -866,7 +876,6 @@ int cs_setHeldItem (int client_fd) {
   if (slot >= 9) return 1;
 
   player->hotbar = slot;
-  broadcastPlayerEquipment(player);
 
   return 0;
 }
@@ -878,30 +887,6 @@ int sc_setHeldItem (int client_fd, uint8_t slot) {
   writeVarInt(client_fd, 0x62);
 
   writeByte(client_fd, slot);
-
-  return 0;
-}
-
-// S->C Entity Equipment (clientbound)
-int sc_entityEquipment (int client_fd, int entity_id, uint8_t slot, uint8_t count, uint16_t item) {
-
-  writeVarInt(client_fd,
-    1 +
-    sizeVarInt(entity_id) +
-    1 +
-    sizeVarInt(count) +
-    (count > 0 ? sizeVarInt(item) + 2 : 0)
-  );
-  writeByte(client_fd, 0x5F);
-
-  writeVarInt(client_fd, entity_id);
-  writeByte(client_fd, slot);
-  writeVarInt(client_fd, count);
-  if (count > 0) {
-    writeVarInt(client_fd, item);
-    writeVarInt(client_fd, 0);
-    writeVarInt(client_fd, 0);
-  }
 
   return 0;
 }

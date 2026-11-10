@@ -4,9 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-// Client transport modes. Every accepted socket starts as unknown and is
-// classified on its first bytes: an HTTP upgrade request becomes a WebSocket,
-// anything else is treated as raw Minecraft protocol.
+// Every accepted socket must start with an HTTP upgrade; raw Minecraft TCP is rejected.
 #define WS_MODE_UNKNOWN 0
 #define WS_MODE_RAW 1
 #define WS_MODE_HANDSHAKE 2
