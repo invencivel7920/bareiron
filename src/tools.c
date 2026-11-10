@@ -265,7 +265,7 @@ uint16_t readUint16 (int client_fd) {
 }
 int16_t readInt16 (int client_fd) {
   recv_count = recv_all(client_fd, recv_buffer, 2, false);
-  return ((int16_t)recv_buffer[0] << 8) | (int16_t)recv_buffer[1];
+  return (int16_t)(((uint16_t)recv_buffer[0] << 8) | recv_buffer[1]);
 }
 uint32_t readUint32 (int client_fd) {
   recv_count = recv_all(client_fd, recv_buffer, 4, false);
@@ -287,14 +287,14 @@ uint64_t readUint64 (int client_fd) {
 }
 int64_t readInt64 (int client_fd) {
   recv_count = recv_all(client_fd, recv_buffer, 8, false);
-  return ((int64_t)recv_buffer[0] << 56) |
-         ((int64_t)recv_buffer[1] << 48) |
-         ((int64_t)recv_buffer[2] << 40) |
-         ((int64_t)recv_buffer[3] << 32) |
-         ((int64_t)recv_buffer[4] << 24) |
-         ((int64_t)recv_buffer[5] << 16) |
-         ((int64_t)recv_buffer[6] << 8) |
-         ((int64_t)recv_buffer[7]);
+  return (int64_t)(((uint64_t)recv_buffer[0] << 56) |
+         ((uint64_t)recv_buffer[1] << 48) |
+         ((uint64_t)recv_buffer[2] << 40) |
+         ((uint64_t)recv_buffer[3] << 32) |
+         ((uint64_t)recv_buffer[4] << 24) |
+         ((uint64_t)recv_buffer[5] << 16) |
+         ((uint64_t)recv_buffer[6] << 8) |
+         ((uint64_t)recv_buffer[7]));
 }
 float readFloat (int client_fd) {
   uint32_t bytes = readUint32(client_fd);
