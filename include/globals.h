@@ -28,7 +28,7 @@
 #define GAMEMODE 0
 
 #define VIEW_DISTANCE 2
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
 #define TIME_BETWEEN_TICKS 500000

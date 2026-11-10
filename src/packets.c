@@ -1378,14 +1378,14 @@ int sc_updateTags (int client_fd) {
 
 int sc_setActionBarText (int client_fd, const char *text) {
   size_t tlen = strlen(text);
-  writeVarInt(client_fd, 1 + 9 + sizeVarInt((uint32_t) tlen) + (int) tlen);
+  writeVarInt(client_fd, 14 + (int) tlen);
   writeByte(client_fd, 0x50);
   writeByte(client_fd, 0x0A);
-  writeVarInt(client_fd, 0);
+  writeUint16(client_fd, 0);
   writeByte(client_fd, 0x08);
-  writeVarInt(client_fd, 4);
+  writeUint16(client_fd, 4);
   send_all(client_fd, "text", 4);
-  writeVarInt(client_fd, (uint32_t) tlen);
+  writeUint16(client_fd, (uint16_t) tlen);
   send_all(client_fd, text, (uint32_t) tlen);
   writeByte(client_fd, 0x00);
   return 0;
