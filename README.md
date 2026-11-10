@@ -47,6 +47,8 @@ The server accepts browser WebSocket connections directly (no external proxy). I
 
 Because browsers block `ws://` from an HTTPS page as mixed content, the server deliberately redirects to **`http://mcraft.fun`** (not HTTPS). The page origin is then insecure, so the browser allows the direct `ws://` connection; no proxy or TLS is needed. This also means mcraft.fun is loaded over plain HTTP: use it only on a trusted network. If your browser enforces HTTPS-only mode, add an exception for mcraft.fun or put a TLS-terminating reverse proxy in front of the ESP32 and use `wss://`.
 
+Recent Chrome versions also enforce **Local Network Access**: a page on the public internet (mcraft.fun) connecting to a device on your LAN/localhost may be blocked with `ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS`. Grant the permission in the browser prompt, or for local testing launch Chrome with `--disable-features=LocalNetworkAccessChecks`. This is a browser permission, not something the server can bypass.
+
 ## Non-volatile storage (optional)
 This section applies to those who target ESP variants and wish to persist world data after a shutdown. Persistence is off by default: chunks are regenerated procedurally and block changes live in RAM. Define `SYNC_WORLD_TO_DISK` in `globals.h` to enable it.
 
