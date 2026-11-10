@@ -225,7 +225,7 @@ void discard_all (int client_fd, size_t remaining, uint8_t require_first) {
   }
 }
 
-ssize_t writeByte (int client_fd, uint8_t byte) {
+__attribute__((weak)) ssize_t writeByte (int client_fd, uint8_t byte) {
   return send_all(client_fd, &byte, 1);
 }
 ssize_t writeUint16 (int client_fd, uint16_t num) {
@@ -253,7 +253,7 @@ ssize_t writeDouble (int client_fd, double num) {
   return send_all(client_fd, &bits, sizeof(bits));
 }
 
-uint8_t readByte (int client_fd) {
+__attribute__((weak)) uint8_t readByte (int client_fd) {
   uint8_t byte;
   recv_count = recv_all(client_fd, &byte, 1, false);
   if (recv_count != 1) return 0;

@@ -1137,7 +1137,8 @@ void handleFluidMovement (short x, uint8_t y, short z, uint8_t fluid, uint8_t bl
   uint8_t block_below = getBlockAt(x, y - 1, z);
   if (isReplaceableBlock(block_below)) {
     makeBlockChange(x, y - 1, z, fluid);
-    return handleFluidMovement(x, y - 1, z, fluid, fluid);
+    handleFluidMovement(x, y - 1, z, fluid, fluid);
+    return;
   }
 
   // Stop flowing laterally at the maximum level

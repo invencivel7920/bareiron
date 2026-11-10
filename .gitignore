@@ -17,3 +17,5 @@ dist/
 # Tooling caches
 .lean_ai/
 .matrixx/
+/.playwright-mcp/
+tests/unit/test_*

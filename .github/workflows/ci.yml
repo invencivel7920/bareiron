@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: sudo apt-get update && sudo apt-get install -y gcc python3
+      - name: Build server
+        run: gcc -O2 -Wall -Wextra -Wpedantic -Iinclude src/*.c -o build/bareiron -lm
+      - name: Unit tests
+        run: |
+          cd tests
+          make SANITIZE=1 unit
+      - name: Integration tests
+        run: tests/run_integration.sh
+EOF
+echo created
