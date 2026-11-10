@@ -473,24 +473,28 @@ int sc_keepAlive (int client_fd) {
 // S->C Set Container Slot
 int sc_setContainerSlot (int client_fd, int window_id, uint16_t slot, uint8_t count, uint16_t item) {
 
+  uint8_t state_id = 0;
+  for (int i = 0; i < MAX_PLAYERS; i ++) {
+    if (player_data[i].client_fd == client_fd) { state_id = player_data[i].container_state_id; break; }
+  }
+
   writeVarInt(client_fd,
     1 +
     sizeVarInt(window_id) +
     1 + 2 +
     sizeVarInt(count) +
-    (count > 0 ? sizeVarInt(item) + 2 : 0)
+    (count > 0 ? sizeVarInt(item) + 1 : 0)
   );
   writeByte(client_fd, 0x14);
 
   writeVarInt(client_fd, window_id);
-  writeVarInt(client_fd, 0);
+  writeVarInt(client_fd, state_id);
   writeUint16(client_fd, slot);
 
   writeVarInt(client_fd, count);
   if (count > 0) {
     writeVarInt(client_fd, item);
-    writeVarInt(client_fd, 0);
-    writeVarInt(client_fd, 0);
+    writeVarInt(client_fd, 0); // components count = 0
   }
 
   return 0;
@@ -621,7 +625,7 @@ int cs_clickContainer (int client_fd) {
 
   int window_id = readVarInt(client_fd);
 
-  readVarInt(client_fd); // ignore state id
+  int state_id = readVarInt(client_fd); // state id
 
   int16_t clicked_slot = readInt16(client_fd);
   uint8_t button = readByte(client_fd);
@@ -631,6 +635,7 @@ int cs_clickContainer (int client_fd) {
 
   PlayerData *player;
   if (getPlayerData(client_fd, &player)) return 1;
+  player->container_state_id = (uint8_t) state_id;
 
   // Only accept windows the server opened itself
   if (window_id != 0 && window_id != 12 && window_id != 14
@@ -1368,5 +1373,20 @@ int sc_registries (int client_fd) {
 
 int sc_updateTags (int client_fd) {
   send_all(client_fd, tags_bin, sizeof(tags_bin));
+  return 0;
+}
+
+int sc_setActionBarText (int client_fd, const char *text) {
+  size_t tlen = strlen(text);
+  writeVarInt(client_fd, 1 + 9 + sizeVarInt((uint32_t) tlen) + (int) tlen);
+  writeByte(client_fd, 0x50);
+  writeByte(client_fd, 0x0A);
+  writeVarInt(client_fd, 0);
+  writeByte(client_fd, 0x08);
+  writeVarInt(client_fd, 4);
+  send_all(client_fd, "text", 4);
+  writeVarInt(client_fd, (uint32_t) tlen);
+  send_all(client_fd, text, (uint32_t) tlen);
+  writeByte(client_fd, 0x00);
   return 0;
 }

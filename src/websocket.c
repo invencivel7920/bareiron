@@ -371,14 +371,18 @@ int ws_handshake_step (int client_fd) {
       "Upgrade: websocket\r\n"
       "Connection: Upgrade\r\n"
       "Sec-WebSocket-Accept: %s\r\n"
-      "Sec-WebSocket-Protocol: %s\r\n\r\n",
+      "Sec-WebSocket-Protocol: %s\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
+      "Access-Control-Allow-Private-Network: true\r\n\r\n",
       accept_b64, first_proto);
   } else {
     n = snprintf(resp, sizeof(resp),
       "HTTP/1.1 101 Switching Protocols\r\n"
       "Upgrade: websocket\r\n"
       "Connection: Upgrade\r\n"
-      "Sec-WebSocket-Accept: %s\r\n\r\n", accept_b64);
+      "Sec-WebSocket-Accept: %s\r\n"
+      "Access-Control-Allow-Origin: *\r\n"
+      "Access-Control-Allow-Private-Network: true\r\n\r\n", accept_b64);
   }
   if (n < 0 || n >= (int) sizeof(resp)) return -1;
   if (ws_raw_write(c, resp, (size_t) n) < 0) return -1;

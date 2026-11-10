@@ -1746,6 +1746,13 @@ void handleServerTick (int64_t time_since_last_tick) {
     // Send Keep Alive and Update Time packets
     sc_keepAlive(player->client_fd);
     sc_updateTime(player->client_fd, world_time);
+    #ifdef DEBUG_MODE
+    {
+      char dbg[128];
+      snprintf(dbg, sizeof(dbg), "x=%d y=%d z=%d hb=%d cnt=%d wt=%u", player->x, player->y, player->z, player->hotbar, player->inventory_count[player->hotbar], world_time);
+      sc_setActionBarText(player->client_fd, dbg);
+    }
+    #endif
     // Tick damage from lava
     uint8_t block = getBlockAt(player->x, player->y, player->z);
     if (block >= B_lava && block < B_lava + 4) {

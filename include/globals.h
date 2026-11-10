@@ -28,6 +28,7 @@
 #define GAMEMODE 0
 
 #define VIEW_DISTANCE 2
+#define DEBUG_MODE 1
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
 #define TIME_BETWEEN_TICKS 500000
@@ -136,6 +137,7 @@ typedef struct {
   uint8_t hunger;
   uint16_t saturation;
   uint8_t hotbar;
+  uint8_t container_state_id;
   uint16_t inventory_items[41];
   uint16_t craft_items[9];
   uint8_t inventory_count[41];

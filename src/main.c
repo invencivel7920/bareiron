@@ -61,10 +61,12 @@ static char name[16];
 static int login_ack_pending[1024];
 static int config_sent[1024];
 
-#define CHUNK_QUEUE_SIZE 64
+#define CHUNK_QUEUE_SIZE 128
+#define CHUNK_SEND_INTERVAL_US 50000
 typedef struct { int fd; short cx, cz; } ChunkJob;
 static ChunkJob chunk_queue[CHUNK_QUEUE_SIZE];
 static int chunk_queue_head = 0, chunk_queue_tail = 0;
+static int64_t chunk_send_deadline = 0;
 
 static void enqueue_chunk (int fd, short cx, short cz) {
   int next = (chunk_queue_tail + 1) % CHUNK_QUEUE_SIZE;
@@ -77,11 +79,13 @@ static void enqueue_chunk (int fd, short cx, short cz) {
 
 static void process_chunk_queue (void) {
   if (chunk_queue_head == chunk_queue_tail) return;
+  if (get_program_time() < chunk_send_deadline) return;
   ChunkJob *job = &chunk_queue[chunk_queue_head];
   chunk_queue_head = (chunk_queue_head + 1) % CHUNK_QUEUE_SIZE;
   if (getClientState(job->fd) != STATE_PLAY) return;
   sc_chunkDataAndUpdateLight(job->fd, job->cx, job->cz);
   flush_send_all();
+  chunk_send_deadline = get_program_time() + CHUNK_SEND_INTERVAL_US;
 }
 
 // Declaração da função handlePacket (definida abaixo)
@@ -167,9 +171,12 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         spawnPlayer(player);
 
         sc_setCenterChunk(client_fd, 0, 0);
-        for (int cx = -VIEW_DISTANCE; cx <= VIEW_DISTANCE; cx++) {
-          for (int cz = -VIEW_DISTANCE; cz <= VIEW_DISTANCE; cz++) {
-            enqueue_chunk(client_fd, cx, cz);
+        enqueue_chunk(client_fd, 0, 0);
+        for (int r = 1; r <= VIEW_DISTANCE; r++) {
+          for (int cx = -r; cx <= r; cx++) {
+            for (int cz = -r; cz <= r; cz++) {
+              if (abs(cx) == r || abs(cz) == r) enqueue_chunk(client_fd, cx, cz);
+            }
           }
         }
         player->visited_x[VISITED_HISTORY - 1] = 0;
@@ -560,7 +567,14 @@ int main () {
     int64_t now = GET_TIME();
     int64_t wait_us = last_tick_time + TIME_BETWEEN_TICKS - now;
     if (wait_us < 0) wait_us = 0;
-    if (chunk_queue_head != chunk_queue_tail && wait_us > 1000) wait_us = 1000;
+    if (chunk_queue_head != chunk_queue_tail) {
+      if (get_program_time() >= chunk_send_deadline) {
+        if (wait_us > 0) wait_us = 0;
+      } else {
+        int64_t w = chunk_send_deadline - get_program_time();
+        if (w < wait_us) wait_us = w;
+      }
+    }
 
     fd_set read_fds;
     FD_ZERO(&read_fds);
