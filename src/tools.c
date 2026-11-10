@@ -205,7 +205,7 @@ void discard_all (int client_fd, size_t remaining, uint8_t require_first) {
   while (remaining > 0) {
     size_t recv_n = remaining > MAX_RECV_BUF_LEN ? MAX_RECV_BUF_LEN : remaining;
     ssize_t received = recv_all(client_fd, recv_buffer, recv_n, require_first);
-    if (received < 0) return;
+    if (received <= 0) return;
     if (received > (ssize_t)remaining) return;
     remaining -= received;
     require_first = false;

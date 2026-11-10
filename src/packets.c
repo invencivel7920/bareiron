@@ -389,7 +389,7 @@ int sc_chunkDataAndUpdateLight (int client_fd, int _x, int _z) {
   static const uint8_t empty_bedrock[6] = { 0x10, 0x00, 0x00, 0x55, 0x00, 0x00 };
   static const uint8_t empty_air[6] = { 0x10, 0x00, 0x00, 0x00, 0x00, 0x00 };
   static uint8_t section_prefix[5 + sizeof(network_block_palette)];
-  uint8_t bulk[84];
+  uint8_t bulk[120];
 
   section_prefix[0] = 0x10; // block count 4096
   section_prefix[1] = 0x00;
@@ -524,9 +524,9 @@ int cs_playerAction (int client_fd) {
   uint8_t action = readByte(client_fd);
 
   int64_t pos = readInt64(client_fd);
-  int x = pos >> 38;
-  int y = pos << 52 >> 52;
-  int z = pos << 26 >> 38;
+  int x = (int)((uint64_t)pos >> 38);
+  int y = (int)((uint64_t)pos << 52 >> 52);
+  int z = (int)((uint64_t)pos << 26 >> 38);
 
   readByte(client_fd); // ignore face
 
@@ -581,9 +581,9 @@ int cs_useItemOn (int client_fd) {
   (void) readByte(client_fd);
 
   int64_t pos = readInt64(client_fd);
-  int x = pos >> 38;
-  int y = pos << 52 >> 52;
-  int z = pos << 26 >> 38;
+  int x = (int)((uint64_t)pos >> 38);
+  int y = (int)((uint64_t)pos << 52 >> 52);
+  int z = (int)((uint64_t)pos << 26 >> 38);
 
   uint8_t face = readByte(client_fd);
 #if ENABLE_BLOCK_LOGS

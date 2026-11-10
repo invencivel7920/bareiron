@@ -62,7 +62,7 @@ static int login_ack_pending[1024];
 static int config_sent[1024];
 
 #define CHUNK_QUEUE_SIZE 128
-#define CHUNK_SEND_INTERVAL_US 50000
+#define CHUNK_SEND_INTERVAL_US 20000
 typedef struct { int fd; short cx, cz; } ChunkJob;
 static ChunkJob chunk_queue[CHUNK_QUEUE_SIZE];
 static int chunk_queue_head = 0, chunk_queue_tail = 0;
@@ -382,8 +382,10 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
 
         uint32_t r = fast_rand();
         if ((r & 3) == 0) {
-          short mob_x = (_x + dx * VIEW_DISTANCE) * 16 + ((r >> 4) & 15);
-          short mob_z = (_z + dz * VIEW_DISTANCE) * 16 + ((r >> 8) & 15);
+          short mob_dx_sign = (dx > 0) ? 1 : (dx < 0 ? -1 : 0);
+          short mob_dz_sign = (dz > 0) ? 1 : (dz < 0 ? -1 : 0);
+          short mob_x = (_x + mob_dx_sign * VIEW_DISTANCE) * 16 + ((r >> 4) & 15);
+          short mob_z = (_z + mob_dz_sign * VIEW_DISTANCE) * 16 + ((r >> 8) & 15);
           int mob_y = (int)cy - 8;
           if (mob_y < 1) mob_y = 1;
           uint8_t b_low = getBlockAt(mob_x, mob_y - 1, mob_z);
@@ -411,21 +413,25 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
 
         sc_setCenterChunk(client_fd, _x, _z);
 
-        while (dx != 0) {
-          enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z);
-          for (int i = 1; i <= VIEW_DISTANCE; i ++) {
-            enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z - i);
-            enqueue_chunk(client_fd, _x + dx * VIEW_DISTANCE, _z + i);
+        int dx_abs = dx > 0 ? dx : -dx;
+        int dx_sign = dx > 0 ? 1 : -1;
+        for (int i = 1; i <= dx_abs; i++) {
+          int strip_x = _x + dx_sign * (VIEW_DISTANCE - dx_abs + i);
+          enqueue_chunk(client_fd, strip_x, _z);
+          for (int j = 1; j <= VIEW_DISTANCE; j++) {
+            enqueue_chunk(client_fd, strip_x, _z - j);
+            enqueue_chunk(client_fd, strip_x, _z + j);
           }
-          dx += dx > 0 ? -1 : 1;
         }
-        while (dz != 0) {
-          enqueue_chunk(client_fd, _x, _z + dz * VIEW_DISTANCE);
-          for (int i = 1; i <= VIEW_DISTANCE; i ++) {
-            enqueue_chunk(client_fd, _x - i, _z + dz * VIEW_DISTANCE);
-            enqueue_chunk(client_fd, _x + i, _z + dz * VIEW_DISTANCE);
+        int dz_abs = dz > 0 ? dz : -dz;
+        int dz_sign = dz > 0 ? 1 : -1;
+        for (int i = 1; i <= dz_abs; i++) {
+          int strip_z = _z + dz_sign * (VIEW_DISTANCE - dz_abs + i);
+          enqueue_chunk(client_fd, _x, strip_z);
+          for (int j = 1; j <= VIEW_DISTANCE; j++) {
+            enqueue_chunk(client_fd, _x - j, strip_z);
+            enqueue_chunk(client_fd, _x + j, strip_z);
           }
-          dz += dz > 0 ? -1 : 1;
         }
 
       }
