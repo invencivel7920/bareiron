@@ -21,6 +21,9 @@
 #define WS_HTTP_BUF 2048
 #define WS_IN_BUF 512
 #define WS_MAX_CLIENTS MAX_PLAYERS
+// Hard cap on a single inbound WebSocket frame payload. Keeps a malicious peer
+// from forcing the server to spend unbounded time/buffer on one frame.
+#define WS_MAX_FRAME_PAYLOAD (1 << 20)
 
 typedef struct {
   int fd;
@@ -260,7 +263,7 @@ static int send_http_error (WsClient *c, const char *status) {
     "HTTP/1.1 %s\r\nConnection: close\r\nContent-Length: 0\r\n"
     "Sec-WebSocket-Version: 13\r\n\r\n", status);
   if (n < 0 || n >= (int) sizeof(resp)) return -1;
-  return ws_raw_write(c, resp, (size_t) n) < 0 ? -1 : -1;
+  return ws_raw_write(c, resp, (size_t) n) < 0 ? -1 : 0;
 }
 
 int ws_sniff (int client_fd) {
@@ -316,13 +319,25 @@ int ws_handshake_step (int client_fd) {
     return 0;
   }
 
-  char upgrade[64], connection[64], key[128], protocol[128], host[128];
-  upgrade[0] = connection[0] = key[0] = protocol[0] = host[0] = '\0';
+  char upgrade[64], connection[64], key[128], protocol[128], host[128], version[16];
+  upgrade[0] = connection[0] = key[0] = protocol[0] = host[0] = version[0] = '\0';
   header_value((const char *) c->http_buf, c->http_len, "upgrade", upgrade, sizeof(upgrade));
   header_value((const char *) c->http_buf, c->http_len, "connection", connection, sizeof(connection));
   int key_len = header_value((const char *) c->http_buf, c->http_len, "sec-websocket-key", key, sizeof(key));
   header_value((const char *) c->http_buf, c->http_len, "sec-websocket-protocol", protocol, sizeof(protocol));
   header_value((const char *) c->http_buf, c->http_len, "host", host, sizeof(host));
+  header_value((const char *) c->http_buf, c->http_len, "sec-websocket-version", version, sizeof(version));
+
+  if (version[0] && strcmp(version, "13") != 0) {
+    char resp[128];
+    int n = snprintf(resp, sizeof(resp),
+      "HTTP/1.1 426 Upgrade Required\\r\\n"
+      "Sec-WebSocket-Version: 13\\r\\n"
+      "Connection: close\\r\\n"
+      "Content-Length: 0\\r\\n\\r\\n");
+    if (n > 0 && n < (int) sizeof(resp)) ws_raw_write(c, resp, (size_t) n);
+    return -1;
+  }
 
   if (key_len <= 0 || !ci_contains(upgrade, (int) strlen(upgrade), "websocket") ||
       !ci_contains(connection, (int) strlen(connection), "upgrade")) {
@@ -492,8 +507,14 @@ static int ws_fill (WsClient *c, int blocking) {
     c->hdr_need = 0;
 
     if (b0 & 0x70) return -1;
+    // Client-to-server frames MUST be masked (RFC 6455).
+    if (!masked) return -1;
+    // Only binary (0x2), text (0x1), continuation (0x0) and control (>=0x8) allowed.
+    if (opcode > 0x2 && opcode < 0x8) return -1;
+    if (len > WS_MAX_FRAME_PAYLOAD) return -1;
 
     if (opcode >= 0x8) {
+      if (opcode != 0x8 && opcode != 0x9 && opcode != 0xA) return -1;
       if (!fin || len > 125) return -1;
       uint8_t ctl[125];
       size_t got = 0;
@@ -505,7 +526,14 @@ static int ws_fill (WsClient *c, int blocking) {
       if (masked) {
         for (size_t k = 0; k < len; k ++) ctl[k] ^= c->mask[k & 3];
       }
-      if (opcode == 0x8) return -1;
+      if (opcode == 0x8) {
+        uint8_t frame[2 + 125];
+        frame[0] = 0x88;
+        frame[1] = (uint8_t) len;
+        memcpy(frame + 2, ctl, (size_t) len);
+        ws_raw_write(c, frame, (size_t) len + 2);
+        return -1;
+      }
       if (opcode == 0x9) {
         uint8_t frame[2 + 125];
         frame[0] = 0x8A;
