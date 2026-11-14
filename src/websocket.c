@@ -40,6 +40,7 @@ typedef struct {
   uint8_t mask[4];
   int mask_pos;
   uint8_t masked;
+  uint8_t expecting_continuation;
   uint8_t http_buf[WS_HTTP_BUF];
 } WsClient;
 
@@ -328,6 +329,17 @@ int ws_handshake_step (int client_fd) {
   header_value((const char *) c->http_buf, c->http_len, "host", host, sizeof(host));
   header_value((const char *) c->http_buf, c->http_len, "sec-websocket-version", version, sizeof(version));
 
+  if (!(c->http_buf[0] == 'G' && c->http_buf[1] == 'E' &&
+        c->http_buf[2] == 'T' && c->http_buf[3] == ' ')) {
+    send_http_error(c, "405 Method Not Allowed");
+    return -1;
+  }
+
+  if (!ci_contains((const char *) c->http_buf, c->http_len, "HTTP/1.1")) {
+    send_http_error(c, "400 Bad Request");
+    return -1;
+  }
+
   if (version[0] && strcmp(version, "13") != 0) {
     char resp[128];
     int n = snprintf(resp, sizeof(resp),
@@ -513,6 +525,13 @@ static int ws_fill (WsClient *c, int blocking) {
     if (opcode > 0x2 && opcode < 0x8) return -1;
     if (len > WS_MAX_FRAME_PAYLOAD) return -1;
 
+    // Fragmentation state tracking (RFC 6455).
+    if (opcode == 0x0) {
+      if (!c->expecting_continuation) return -1;
+    } else if (opcode == 0x1 || opcode == 0x2) {
+      if (c->expecting_continuation) return -1;
+    }
+
     if (opcode >= 0x8) {
       if (opcode != 0x8 && opcode != 0x9 && opcode != 0xA) return -1;
       if (!fin || len > 125) return -1;
@@ -527,11 +546,26 @@ static int ws_fill (WsClient *c, int blocking) {
         for (size_t k = 0; k < len; k ++) ctl[k] ^= c->mask[k & 3];
       }
       if (opcode == 0x8) {
+        int protocol_error = 0;
+        if (len == 1) protocol_error = 1;
+        if (len >= 2) {
+          uint16_t code = ((uint16_t) ctl[0] << 8) | ctl[1];
+          if (code < 1000 || code == 1004 || code == 1005 ||
+              code == 1006 || code == 1015 ||
+              (code > 1015 && code < 3000)) protocol_error = 1;
+        }
         uint8_t frame[2 + 125];
         frame[0] = 0x88;
-        frame[1] = (uint8_t) len;
-        memcpy(frame + 2, ctl, (size_t) len);
-        ws_raw_write(c, frame, (size_t) len + 2);
+        if (protocol_error) {
+          frame[1] = 2;
+          frame[2] = 0x03; // 1002
+          frame[3] = 0xEA;
+          ws_raw_write(c, frame, 4);
+        } else {
+          frame[1] = (uint8_t) len;
+          memcpy(frame + 2, ctl, (size_t) len);
+          ws_raw_write(c, frame, (size_t) len + 2);
+        }
         return -1;
       }
       if (opcode == 0x9) {
@@ -545,6 +579,9 @@ static int ws_fill (WsClient *c, int blocking) {
     }
 
     c->payload_left = len;
+    if (opcode == 0x0 || opcode == 0x1 || opcode == 0x2) {
+      c->expecting_continuation = fin ? 0 : 1;
+    }
   }
 }
 
