@@ -339,7 +339,7 @@ int ws_handshake_step (int client_fd) {
     return -1;
   }
 
-  if (key_len <= 0 || !ci_contains(upgrade, (int) strlen(upgrade), "websocket") ||
+  if (key_len != 24 || !ci_contains(upgrade, (int) strlen(upgrade), "websocket") ||
       !ci_contains(connection, (int) strlen(connection), "upgrade")) {
     char target_host[160];
     if (host[0] && strchr(host, ':') == NULL) {
