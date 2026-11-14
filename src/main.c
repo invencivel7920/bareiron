@@ -613,6 +613,19 @@ int main () {
     #endif
 
     now = GET_TIME();
+    {
+      static int64_t last_ws_ping = 0;
+      if (last_ws_ping == 0) last_ws_ping = now;
+      if (now - last_ws_ping > 15000000LL) {
+        flush_send_all();
+        for (int _i = 0; _i < MAX_PLAYERS; _i ++) {
+          if (clients[_i] != -1 && ws_is_open(clients[_i])) {
+            ws_send_ping(clients[_i]);
+          }
+        }
+        last_ws_ping = now;
+      }
+    }
     if (now - last_tick_time >= TIME_BETWEEN_TICKS) {
       handleServerTick(now - last_tick_time);
       flush_send_all();

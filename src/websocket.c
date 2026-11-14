@@ -638,3 +638,10 @@ int ws_frame_header (uint8_t *out, uint64_t len) {
   for (int i = 0; i < 8; i ++) out[2 + i] = (uint8_t)(len >> (56 - 8 * i));
   return 10;
 }
+
+int ws_send_ping (int client_fd) {
+  WsClient *c = ws_find(client_fd);
+  if (!c || c->mode != WS_MODE_OPEN) return -1;
+  uint8_t frame[2] = { 0x89, 0x00 };
+  return ws_raw_write(c, frame, 2) < 0 ? -1 : 0;
+}

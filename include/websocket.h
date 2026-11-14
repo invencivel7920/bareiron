@@ -34,4 +34,7 @@ ssize_t ws_recv (int client_fd, void *buf, size_t n, int require_first);
 // Returns the header length written into out (out must hold 10 bytes).
 int ws_frame_header (uint8_t *out, uint64_t len);
 
+// Sends a WebSocket ping (keep-alive) frame. Returns 0 on success, -1 on error.
+int ws_send_ping (int client_fd);
+
 #endif
