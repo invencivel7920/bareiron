@@ -179,13 +179,36 @@ ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
     flush_send_buffer();
     send_buf_fd = client_fd;
     if (len >= SEND_BUF_SIZE) {
-      ssize_t sent = send_raw_nb(client_fd, buf, len);
-      if (sent < 0) sent = 0;
-      if (sent < len) {
-        pending_fd = client_fd;
-        pending_len = (size_t)(len - sent);
-        pending_off = 0;
-        memcpy(pending_buf, (const uint8_t *)buf + sent, pending_len);
+      // Large payloads are sent in SEND_BUF_SIZE chunks. Each chunk is framed
+      // individually when the transport is a WebSocket, so a single oversized
+      // write never bypasses WebSocket framing.
+      const uint8_t *p = (const uint8_t *) buf;
+      size_t off = 0;
+      while (off < (size_t) len) {
+        size_t chunk = (size_t) len - off;
+        if (chunk > SEND_BUF_SIZE) chunk = SEND_BUF_SIZE;
+        uint8_t frame_buf[SEND_BUF_SIZE + 10];
+        int frame_len;
+        if (!ws_is_open(client_fd)) {
+          memcpy(frame_buf, p + off, chunk);
+          frame_len = (int) chunk;
+        } else {
+          uint8_t header[10];
+          int hlen = ws_frame_header(header, (uint64_t) chunk);
+          memcpy(frame_buf, header, hlen);
+          memcpy(frame_buf + hlen, p + off, chunk);
+          frame_len = hlen + (int) chunk;
+        }
+        ssize_t sent = send_raw_nb(client_fd, frame_buf, frame_len);
+        if (sent < 0) sent = 0;
+        if (sent < frame_len) {
+          pending_fd = client_fd;
+          pending_len = (size_t) (frame_len - sent);
+          pending_off = 0;
+          memcpy(pending_buf, frame_buf + sent, pending_len);
+          return len;
+        }
+        off += chunk;
       }
       return len;
     }
