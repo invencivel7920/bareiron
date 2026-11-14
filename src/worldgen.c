@@ -409,8 +409,8 @@ uint8_t precomputeChunkData (int cx, int cz) {
 
       ChunkAnchor *anchor = chunk_anchors + anchor_index;
 
-      anchor->x = j / CHUNK_SIZE;
-      anchor->z = i / CHUNK_SIZE;
+      anchor->x = div_floor(j, CHUNK_SIZE);
+      anchor->z = div_floor(i, CHUNK_SIZE);
       anchor->hash = getChunkHash(anchor->x, anchor->z);
       anchor->biome = getChunkBiome(anchor->x, anchor->z);
 
