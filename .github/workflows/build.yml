@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+env:
+  # Fixar a versão do Minecraft para evitar quebras quando o Mojang atualizar
+  MINECRAFT_VERSION: "1.21.9"
+  # Hash do server.jar para esta versão (atualize conforme necessário)
+  SERVER_JAR_URL: "https://piston-data.mojang.com/v1/objects/6bce4ef400e4efaa63a13d5e6f6b500be969ef81/server.jar"
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -17,27 +23,44 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v1
+      - name: Cache JDK 24
+        uses: actions/cache@v4
+        id: cache-jdk
         with:
-          bun-version: latest
-
-      - name: Download cosmocc
-        run: |
-          curl -LO https://cosmo.zip/pub/cosmocc/cosmocc.zip
-          unzip cosmocc.zip -d cosmocc
-          echo "$PWD/cosmocc/bin" >> $GITHUB_PATH
+          path: jdk-24.0.2
+          key: jdk-24.0.2-${{ runner.os }}
 
       - name: Install JDK 24
+        if: steps.cache-jdk.outputs.cache-hit != 'true'
         run: |
           curl -LO https://download.java.net/java/GA/jdk24.0.2/fdc5d0102fe0414db21410ad5834341f/12/GPL/openjdk-24.0.2_linux-x64_bin.tar.gz
           tar -xzf openjdk-24.0.2_linux-x64_bin.tar.gz
 
+      - name: Cache cosmocc
+        uses: actions/cache@v4
+        id: cache-cosmocc
+        with:
+          path: cosmocc
+          key: cosmocc-${{ runner.os }}-v1
+
+      - name: Download cosmocc
+        if: steps.cache-cosmocc.outputs.cache-hit != 'true'
+        run: |
+          curl -LO https://cosmo.zip/pub/cosmocc/cosmocc.zip
+          unzip cosmocc.zip -d cosmocc
+      - name: Add cosmocc to PATH
+        run: echo "$PWD/cosmocc/bin" >> $GITHUB_PATH
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Dump Minecraft server registries
         run: |
-          mkdir notchian
+          mkdir -p notchian
           cd notchian
-          curl -Lo server.jar https://piston-data.mojang.com/v1/objects/6bce4ef400e4efaa63a13d5e6f6b500be969ef81/server.jar
+          curl -Lo server.jar "${{ env.SERVER_JAR_URL }}"
           echo "eula=true" > eula.txt
           ../jdk-24.0.2/bin/java -DbundlerMainClass="net.minecraft.data.Main" -jar server.jar --all
 
@@ -54,8 +77,13 @@ jobs:
         with:
           tag_name: latest
           name: Latest build
-          body: "This is a rolling release of bareiron, compiled from the latest commit on the main branch.\n\nThe executable (`bareiron.exe`) is a Cosmopolitan-built polyglot, and should run on Windows and Linux (and Mac?), despite the file extension."
+          body: |
+            This is a rolling release of bareiron, compiled from the latest commit on the main branch.
+
+            The executable (`bareiron.exe`) is a Cosmopolitan-built polyglot, and should run on Windows and Linux (and Mac?), despite the file extension.
           files: bareiron.exe
           prerelease: true
+          make_latest: true          # Garante que esta release seja a mais recente
+          fail_on_unmatched_files: true  # Falha se o artefato não for gerado
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
