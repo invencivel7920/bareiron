@@ -24,6 +24,10 @@ int main(void) {
     buildChunkSection(16, 32, -32);
     printf("worldgen cross-chunk: OK\n");
 
+    precomputeChunkData(-16, -32);
+    buildChunkSection(-16, 0, -32);
+    printf("worldgen negative-chunk: OK\n");
+
     printf("ALL PASS\n");
     return 0;
 }
