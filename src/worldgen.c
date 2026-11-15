@@ -19,7 +19,7 @@ uint32_t getChunkHash (short x, short z) {
 
   // Copy through a properly aligned uint64_t instead of type-punning the
   // byte buffer (avoids strict-aliasing and unaligned-access UB).
-  uint64_t key;
+  uint64_t key = 0;
   memcpy(&key, buf, sizeof(key));
   return (uint32_t)splitmix64(key);
 
@@ -39,8 +39,8 @@ uint8_t getChunkBiome (short x, short z) {
   if (dx * dx + dz * dz > BIOME_RADIUS * BIOME_RADIUS) return W_beach;
 
   // Calculate "biome coordinates" (one step above chunk coordinates)
-  short biome_x = div_floor(x, BIOME_SIZE);
-  short biome_z = div_floor(z, BIOME_SIZE);
+  int biome_x = div_floor(x, BIOME_SIZE);
+  int biome_z = div_floor(z, BIOME_SIZE);
 
   // The biome itself is plucked directly from the world seed.
   // The 32-bit seed is treated as a 4x4 biome matrix, with each biome
@@ -48,8 +48,8 @@ uint8_t getChunkBiome (short x, short z) {
   // beaches. Using the world seed as a repeating pattern avoids
   // having to generate and layer yet another hash.
   // biome_x/biome_z are chunk coordinates; fold them into the 4x4 biome matrix.
-  uint8_t index = (uint8_t)((biome_x & 3) + ((biome_z & 3) * 4));
-  return (uint8_t)((world_seed >> (index * 2)) & 3);
+  uint8_t index = (uint8_t)(((unsigned)biome_x & 3u) + (((unsigned)biome_z & 3u) * 4u));
+  return (uint8_t)((world_seed >> (index * 2)) & 3u);
 
 }
 
