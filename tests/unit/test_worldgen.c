@@ -5,6 +5,7 @@
 
 #include "worldgen.h"
 #include "globals.h"
+#include "registries.h"
 
 int main(void) {
     uint8_t h1[4096], h2[4096];
@@ -27,6 +28,12 @@ int main(void) {
     precomputeChunkData(-16, -32);
     buildChunkSection(-16, 0, -32);
     printf("worldgen negative-chunk: OK\n");
+
+    precomputeChunkData(0, 0);
+    assert(getBlockAt(-1, 70, -1) == getBlockAt(7, 70, 7));
+    assert(getBlockAt(0, 81, 0) == B_air);
+    assert(getBlockAt(0, -1, 0) == B_bedrock);
+    printf("worldgen block bounds: OK\n");
 
     printf("ALL PASS\n");
     return 0;
