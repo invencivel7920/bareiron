@@ -571,7 +571,7 @@ int main () {
     exit(EXIT_FAILURE);
   }
 
-  if (listen(server_fd, 5) < 0) {
+  if (listen(server_fd, 8) < 0) {
     perror("listen failed");
     close(server_fd);
     exit(EXIT_FAILURE);
@@ -699,6 +699,21 @@ int main () {
         setsockopt(new_fd, SOL_SOCKET, SO_SNDBUF, (char *)&sndbuf, sizeof(sndbuf));
         int rcvbuf = 65536;
         setsockopt(new_fd, SOL_SOCKET, SO_RCVBUF, (char *)&rcvbuf, sizeof(rcvbuf));
+        // Detect dead peers faster on long-lived Minecraft sessions.
+        int keepalive = 1;
+        setsockopt(new_fd, SOL_SOCKET, SO_KEEPALIVE, (char *)&keepalive, sizeof(keepalive));
+        #ifdef TCP_KEEPIDLE
+        int keepidle = 30;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_KEEPIDLE, (char *)&keepidle, sizeof(keepidle));
+        #endif
+        #ifdef TCP_KEEPINTVL
+        int keepintvl = 10;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_KEEPINTVL, (char *)&keepintvl, sizeof(keepintvl));
+        #endif
+        #ifdef TCP_KEEPCNT
+        int keepcnt = 3;
+        setsockopt(new_fd, IPPROTO_TCP, TCP_KEEPCNT, (char *)&keepcnt, sizeof(keepcnt));
+        #endif
         #endif
         client_count ++;
         ws_client_init(new_fd);
