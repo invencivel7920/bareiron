@@ -47,8 +47,9 @@ uint8_t getChunkBiome (short x, short z) {
   // taking up 2 bytes. This is why there are only 4 biomes, excluding
   // beaches. Using the world seed as a repeating pattern avoids
   // having to generate and layer yet another hash.
-  uint8_t index = abs((biome_x & 3) + ((biome_z * 4) & 15));
-  return (world_seed >> (index * 2)) & 3;
+  // biome_x/biome_z are chunk coordinates; fold them into the 4x4 biome matrix.
+  uint8_t index = (uint8_t)((biome_x & 3) + ((biome_z & 3) * 4));
+  return (uint8_t)((world_seed >> (index * 2)) & 3);
 
 }
 
@@ -407,6 +408,12 @@ uint8_t precomputeChunkData (int cx, int cz) {
   for (int i = cz; i < cz + 16 + CHUNK_SIZE; i += CHUNK_SIZE) {
     for (int j = cx; j < cx + 16 + CHUNK_SIZE; j += CHUNK_SIZE) {
 
+      // Local (0..2) indices so negative chunk coordinates don't escape
+      // the 3x3 anchor grid.
+      int local_j = (j - cx) / CHUNK_SIZE;
+      int local_i = (i - cz) / CHUNK_SIZE;
+      anchor_index = local_j + local_i * (16 / CHUNK_SIZE + 1);
+
       ChunkAnchor *anchor = chunk_anchors + anchor_index;
 
       anchor->x = div_floor(j, CHUNK_SIZE);
@@ -419,8 +426,6 @@ uint8_t precomputeChunkData (int cx, int cz) {
         chunk_features[feature_index] = getFeatureFromAnchor(*anchor);
         feature_index ++;
       }
-
-      anchor_index ++;
     }
   }
 
