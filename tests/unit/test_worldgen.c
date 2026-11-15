@@ -35,6 +35,13 @@ int main(void) {
     assert(getBlockAt(0, -1, 0) == B_bedrock);
     printf("worldgen block bounds: OK\n");
 
+    precomputeChunkData(0, 0);
+    assert(getHeightAt(3, 5) == getHeightAt(3, 5));
+    assert(getHeightAt(3, 5) >= TERRAIN_BASE_HEIGHT && getHeightAt(3, 5) <= 80);
+    uint8_t biome = getChunkBiome(0, 0);
+    assert(biome < 4);
+    printf("worldgen terrain: OK\n");
+
     printf("ALL PASS\n");
     return 0;
 }
