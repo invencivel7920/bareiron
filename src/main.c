@@ -859,6 +859,7 @@ void wifi_init () {
   esp_wifi_set_mode(WIFI_MODE_STA);
   esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
   esp_wifi_set_ps(WIFI_PS_NONE);
+  esp_wifi_set_max_tx_power(84); // 21 dBm, maximize range/throughput
   esp_wifi_start();
 }
 
