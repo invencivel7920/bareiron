@@ -351,15 +351,37 @@ int ws_handshake_step (int client_fd) {
     return -1;
   }
 
-  if (key_len != 24 || !ci_contains(upgrade, (int) strlen(upgrade), "websocket") ||
+  // Validate the Sec-WebSocket-Key is well-formed base64 (RFC 6455).
+  int key_ok = (key_len == 24);
+  if (key_ok) {
+    for (int i = 0; i < key_len; i ++) {
+      char ch = key[i];
+      int b64 = (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+                (ch >= '0' && ch <= '9') || ch == '+' || ch == '/' ||
+                (ch == '=' && (i == 22 || i == 23));
+      if (!b64) { key_ok = 0; break; }
+    }
+    // The last two characters of a 24-char key must be padding.
+    if (key_ok && !(key[22] == '=' && key[23] == '=')) key_ok = 0;
+  }
+
+  if (!key_ok || !ci_contains(upgrade, (int) strlen(upgrade), "websocket") ||
       !ci_contains(connection, (int) strlen(connection), "upgrade")) {
     char target_host[160];
-    if (host[0] && strchr(host, ':') == NULL) {
-      snprintf(target_host, sizeof(target_host), "%s:25565", host);
-    } else if (host[0]) {
-      snprintf(target_host, sizeof(target_host), "%s", host);
-    } else {
+    if (!host[0]) {
       snprintf(target_host, sizeof(target_host), "localhost:25565");
+    } else if (host[0] == '[') {
+      // IPv6 literal: append port only if none is present after the bracket.
+      char *bracket = strchr(host, ']');
+      if (bracket && bracket[1] == ':') {
+        snprintf(target_host, sizeof(target_host), "%s", host);
+      } else {
+        snprintf(target_host, sizeof(target_host), "%s:25565", host);
+      }
+    } else if (strchr(host, ':') == NULL) {
+      snprintf(target_host, sizeof(target_host), "%s:25565", host);
+    } else {
+      snprintf(target_host, sizeof(target_host), "%s", host);
     }
     char resp[384];
     int n = snprintf(resp, sizeof(resp),
@@ -523,6 +545,13 @@ static int ws_fill (WsClient *c, int blocking) {
     if (!masked) return -1;
     // Only binary (0x2), text (0x1), continuation (0x0) and control (>=0x8) allowed.
     if (opcode > 0x2 && opcode < 0x8) return -1;
+
+    // This server only carries binary Minecraft data; reject text frames.
+    if (opcode == 0x1) {
+      uint8_t frame[4] = { 0x88, 0x02, 0x03, 0xEB }; // close 1003
+      ws_raw_write(c, frame, 4);
+      return -1;
+    }
     if (len > WS_MAX_FRAME_PAYLOAD) return -1;
 
     // Fragmentation state tracking (RFC 6455).
