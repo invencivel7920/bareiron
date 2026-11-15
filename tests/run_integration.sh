@@ -15,6 +15,7 @@ sleep 0.5
 cleanup() { kill $SRV 2>/dev/null || true; }
 trap cleanup EXIT
 cd "${ROOT}/tests/integration"
+python3 -u test_ws_handshake.py
 python3 -u test_ws_protocol.py
 python3 -u test_fuzz.py
 echo "INTEGRATION OK"
