@@ -122,7 +122,7 @@ uint8_t getCornerHeight (uint32_t hash, uint8_t biome) {
 uint8_t interpolate (uint8_t a, uint8_t b, uint8_t c, uint8_t d, int x, int z) {
   uint16_t top    = a * (CHUNK_SIZE - x) + b * x;
   uint16_t bottom = c * (CHUNK_SIZE - x) + d * x;
-  return (top * (CHUNK_SIZE - z) + bottom * z) / (CHUNK_SIZE * CHUNK_SIZE);
+  return (top * (CHUNK_SIZE - z) + bottom * z) >> 6;
 }
 
 // Calculates terrain height using a pointer to an array of anchors
@@ -429,16 +429,44 @@ uint8_t precomputeChunkData (int cx, int cz) {
     }
   }
 
+  // Precompute corner heights for the 3x3 anchor grid once per chunk, instead
+  // of recomputing getCornerHeight for every one of the 256 blocks.
+  uint8_t corner_heights[3][3];
+  for (int az = 0; az < 3; az ++) {
+    for (int ax = 0; ax < 3; ax ++) {
+      ChunkAnchor *a = &chunk_anchors[ax + az * 3];
+      corner_heights[ax][az] = getCornerHeight(a->hash, a->biome);
+    }
+  }
+
   uint8_t max_height = 0;
   for (int i = 0; i < 16; i ++) {
     for (int j = 0; j < 16; j ++) {
-      anchor_index = (j / CHUNK_SIZE) + (i / CHUNK_SIZE) * (16 / CHUNK_SIZE + 1);
-      ChunkAnchor *anchor_ptr = chunk_anchors + anchor_index;
-      uint8_t height = getHeightAtFromAnchors(j % CHUNK_SIZE, i % CHUNK_SIZE, anchor_ptr);
+      int ax = j / CHUNK_SIZE;
+      int az = i / CHUNK_SIZE;
+      int rx = j % CHUNK_SIZE;
+      int rz = i % CHUNK_SIZE;
+
+      uint8_t a = corner_heights[ax][az];
+      uint8_t b = corner_heights[ax + 1][az];
+      uint8_t c = corner_heights[ax][az + 1];
+      uint8_t d = corner_heights[ax + 1][az + 1];
+
+      uint8_t height;
+      if (rx == 0 && rz == 0) {
+        int h = a;
+        if (h > 67) h -= 1;
+        height = (uint8_t) h;
+      } else {
+        uint16_t top    = (uint16_t) a * (CHUNK_SIZE - rx) + (uint16_t) b * rx;
+        uint16_t bottom = (uint16_t) c * (CHUNK_SIZE - rx) + (uint16_t) d * rx;
+        height = (uint8_t) ((top * (CHUNK_SIZE - rz) + bottom * rz) >> 6);
+      }
+
       chunk_section_height[j][i] = height;
       if (height > max_height) max_height = height;
 
-      chunk_ore_y[j][i] = getOreY(j % CHUNK_SIZE, i % CHUNK_SIZE);
+      chunk_ore_y[j][i] = getOreY(rx, rz);
     }
   }
   return max_height;
