@@ -33,21 +33,18 @@ extern bool debug_mode;     // definida em main.c
 // S->C Status Response (server list ping)
 int sc_statusResponse (int client_fd) {
 
-  char header[] = "{"
-    "\"version\":{\"name\":\"1.21.8\",\"protocol\":772},"
+  char json[512];
+  int json_len = snprintf(json, sizeof(json),
+    "{\"version\":{\"name\":\"1.21.8\",\"protocol\":772},"
     "\"players\":{\"max\":10,\"online\":0},"
-    "\"description\":{\"text\":\"";
-  char footer[] = "\"}}";
+    "\"description\":{\"text\":\"%s\"}}", motd);
+  if (json_len < 0 || json_len >= (int) sizeof(json)) return 1;
 
-  uint16_t string_len = sizeof(header) + sizeof(footer) + motd_len - 2;
-
-  writeVarInt(client_fd, 1 + string_len + sizeVarInt(string_len));
+  writeVarInt(client_fd, 1 + json_len + sizeVarInt((uint32_t) json_len));
   writeByte(client_fd, 0x00);
 
-  writeVarInt(client_fd, string_len);
-  send_all(client_fd, header, sizeof(header) - 1);
-  send_all(client_fd, motd, motd_len);
-  send_all(client_fd, footer, sizeof(footer) - 1);
+  writeVarInt(client_fd, (uint32_t) json_len);
+  send_all(client_fd, json, (ssize_t) json_len);
 
   return 0;
 }
