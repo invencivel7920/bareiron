@@ -28,7 +28,7 @@
 // Modo de jogo: 2 = aventura (menos dano)
 #define GAMEMODE 0
 
-#define VIEW_DISTANCE 2
+#define VIEW_DISTANCE 1
 #define DEBUG_MODE 0
 
 // Intervalo entre ticks (500 ms para reduzir CPU)
