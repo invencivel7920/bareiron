@@ -58,8 +58,17 @@ bool debug_mode = false;
 // Variáveis estáticas para reduzir uso de pilha
 static uint8_t uuid[16];
 static char name[16];
-static int login_ack_pending[1024];
-static int config_sent[1024];
+static int login_ack_pending[MAX_PLAYERS];
+static int config_sent[MAX_PLAYERS];
+static int *client_fds_ptr = NULL;
+
+static int client_slot_of (int fd) {
+  if (!client_fds_ptr) return -1;
+  for (int i = 0; i < MAX_PLAYERS; i ++) {
+    if (client_fds_ptr[i] == fd) return i;
+  }
+  return -1;
+}
 
 #define CHUNK_QUEUE_SIZE 128
 #define CHUNK_SEND_INTERVAL_US 20000
@@ -122,11 +131,17 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         }
         if (sc_loginSuccess(client_fd, uuid, name)) break;
         setClientState(client_fd, STATE_CONFIGURATION);
-        if (client_fd >= 0 && client_fd < 1024) login_ack_pending[client_fd] = 1;
+        {
+          int _s = client_slot_of(client_fd);
+          if (_s >= 0) login_ack_pending[_s] = 1;
+        }
       } else if (state == STATE_CONFIGURATION) {
         if (length == 0) break;
         if (cs_clientInformation(client_fd)) break;
-        if (client_fd >= 0 && client_fd < 1024 && config_sent[client_fd]) break;
+        {
+          int _s = client_slot_of(client_fd);
+          if (_s >= 0 && config_sent[_s]) break;
+        }
         if (sc_featureFlags(client_fd)) break;
         if (sc_updateTags(client_fd)) break;
         if (sc_knownPacks(client_fd)) break;
@@ -134,7 +149,10 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
         #ifdef SEND_BRAND
         if (sc_sendPluginMessage(client_fd, "minecraft:brand", (uint8_t *)brand, brand_len)) break;
         #endif
-        if (client_fd >= 0 && client_fd < 1024) config_sent[client_fd] = 1;
+        {
+          int _s = client_slot_of(client_fd);
+          if (_s >= 0) config_sent[_s] = 1;
+        }
       }
       break;
 
@@ -157,12 +175,17 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
       if (state == STATE_LOGIN) {
         printf("Client Acknowledged Login\n\n");
         setClientState(client_fd, STATE_CONFIGURATION);
-        if (client_fd >= 0 && client_fd < 1024) login_ack_pending[client_fd] = 0;
-      } else if (state == STATE_CONFIGURATION && client_fd >= 0 && client_fd < 1024 && login_ack_pending[client_fd]) {
-        printf("Client Acknowledged Login (late)\n\n");
-        login_ack_pending[client_fd] = 0;
+        {
+          int _s = client_slot_of(client_fd);
+          if (_s >= 0) login_ack_pending[_s] = 0;
+        }
       } else if (state == STATE_CONFIGURATION) {
-        printf("Client Acknowledged Configuration\n\n");
+        int _s = client_slot_of(client_fd);
+        if (_s >= 0 && login_ack_pending[_s]) {
+          printf("Client Acknowledged Login (late)\n\n");
+          login_ack_pending[_s] = 0;
+        } else {
+          printf("Client Acknowledged Configuration\n\n");
         setClientState(client_fd, STATE_PLAY);
         sc_loginPlay(client_fd);
 
@@ -204,6 +227,7 @@ void handlePacket(int client_fd, int length, int packet_id, int state) {
           broadcastMobMetadata(client_fd, -2 - i);
         }
 
+      }
       }
       break;
 
@@ -517,6 +541,7 @@ int main () {
     player_data[i].client_fd = -1;
   }
   registerClientSlots(clients);
+  client_fds_ptr = clients;
 
   int server_fd, opt = 1;
   struct sockaddr_in server_addr, client_addr;
