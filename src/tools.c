@@ -125,7 +125,7 @@ static void flush_send_buffer (void) {
   send_buf_len = 0;
   send_buf_fd = -1;
 
-  uint8_t frame_buf[SEND_BUF_SIZE + SEND_BUF_HEADER];
+  static uint8_t frame_buf[SEND_BUF_SIZE + SEND_BUF_HEADER];
   int frame_len;
   if (!ws_is_open(fd)) {
     memcpy(frame_buf, send_data, len);
@@ -187,7 +187,7 @@ ssize_t send_all (int client_fd, const void *buf, ssize_t len) {
       while (off < (size_t) len) {
         size_t chunk = (size_t) len - off;
         if (chunk > SEND_BUF_SIZE) chunk = SEND_BUF_SIZE;
-        uint8_t frame_buf[SEND_BUF_SIZE + 10];
+        static uint8_t frame_buf[SEND_BUF_SIZE + 10];
         int frame_len;
         if (!ws_is_open(client_fd)) {
           memcpy(frame_buf, p + off, chunk);
