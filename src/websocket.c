@@ -335,6 +335,11 @@ int ws_handshake_step (int client_fd) {
     return -1;
   }
 
+  if (host[0] == 0) {
+    send_http_error(c, "400 Bad Request");
+    return -1;
+  }
+
   if (!ci_contains((const char *) c->http_buf, c->http_len, "HTTP/1.1")) {
     send_http_error(c, "400 Bad Request");
     return -1;
